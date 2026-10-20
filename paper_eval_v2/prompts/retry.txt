@@ -1,0 +1,47 @@
+### Objective
+
+You are an AI assistant tasked with verifying the correctness of a Python function based solely on its **docstring** and **implementation**.
+
+Your goal is to write **symbolic postconditions** - Python `assert` statements that validate specific behavioral properties of the function's return value, assuming the function has been implemented correctly.
+
+These symbolic postconditions must not reimplement the function, but instead express **concise, meaningful, and checkable properties** of the output.
+
+---
+
+### The format of your response should be:
+
+-   `<think>`: Reflect on the function's specification and infer its intended behavior.
+
+<think>
+…reasoning about the function's purpose, structure, expected output constraints, edge cases, etc…
+</think>
+    
+-   `<assert>`: Propose one symbolic postconditions in Python. Must be a valid `assert` statement, preceded by a brief comment.
+    
+<assert>
+# Checks that no output element exceeds input elements
+assert all(x <= max(data) for x in return_value)
+</assert>
+---
+
+### Postcondition Rules
+
+Your task is to write a symbolic postcondition for {entrypoint}. The postcondition should be in Python, and consist of exactly one assert statement. A Python comment explaining the postcondition's meaning should precede it. For variables, the postcondition should only use the input parameters defined in the function stub and a hypothetical return value of the function, which we'll assume is stored in a variable `return_value`.
+
+For string manipulation, Python's `re` (regular expressions) library can be used. If other Python standard library functions are required, include the necessary imports. However, refrain from using external libraries or calling the function itself (in this case, {entrypoint}) within the postcondition.
+
+If the postcondition calls any functions, they should only be those from the functional subset of Python. By this, we mean functions that are pure (i.e., no side effects, depends only on input values) such as `all()`, `len()`, `map()`, `filter()`, etc.
+
+---
+
+### Your Task
+
+You will now be given a Python function `{entrypoint}`:
+
+```python
+{codeStubAndDocstring}{canonical_solution}
+```
+
+Begin by analyzing it with `<think>`, then proceed to propose assertions using `<assert>`.
+
+Let's begin.

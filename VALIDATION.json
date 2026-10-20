@@ -1,0 +1,13 @@
+{
+  "date": "2026-10-20",
+  "tests": 93,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "pytest_reported_seconds": 156.93,
+  "wheel_build": true,
+  "isolated_install_import_cli": true,
+  "docker_tested": false,
+  "real_llm_tested": false,
+  "engine_python_files_unchanged": 43
+}

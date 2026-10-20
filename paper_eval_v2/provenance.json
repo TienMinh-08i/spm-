@@ -1,0 +1,21 @@
+{
+  "source": "paper_eval local working tree, 2026-09-26",
+  "preserved": [
+    "original SpecMind prompt strings and response parser",
+    "dataset normalization and nodeid conversion",
+    "pytest hook and isolated mutmut export foundation"
+  ],
+  "scope": "dataset evaluation; PR/EvalPlus runners remain in paper_eval",
+  "upstream_snapshots": {
+    "paper_eval\\run_dataset_eval.py": "4b0a756719d2447ac5a220a187b100bf580fc95f8579a8c01abcb1c057e33231",
+    "paper_eval\\specmind_adapter.py": "f47d94dea0cf62d08e6c864125ee2a7aa022368d2f1ab30b1df1fa04d16b861d",
+    "paper_eval\\vendor\\specmind_original\\generate_and_test_postconditions_general.py": "37c9c6796c33daef319e2350b5bba9b40063f0dab26fb16dd76c3f29d4327fb8"
+  },
+  "protocol_changes": [
+    "Fixed-exported lower/upper-bound assertion feedback",
+    "Only actual submissions can be selected",
+    "Runtime source and path guard",
+    "Original signature used for assertion input binding",
+    "Suite-level set difference for additional kills"
+  ]
+}

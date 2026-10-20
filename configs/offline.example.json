@@ -1,0 +1,11 @@
+{
+  "repo_root": "../checkouts/marshmallow",
+  "prepared_dataset": "../artifacts/dataset",
+  "prepared_mutants": "../artifacts/mutants",
+  "context_mode": "none",
+  "max_turns": 24,
+  "batch_size": 500,
+  "pytest_timeout": 120,
+  "assertion_policy": "behavioral",
+  "mock_assertion": "assert return_value == return_value"
+}
