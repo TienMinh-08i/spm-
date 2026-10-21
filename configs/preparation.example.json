@@ -1,0 +1,13 @@
+{
+  "repo": "../checkouts/marshmallow",
+  "output": "../artifacts/marshmallow",
+  "expected_commit": "60a803821466f3e537fa2729d65e1aaf7df9d2a4",
+  "documented_only": false,
+  "trace_timeout": 1800,
+  "pytest_timeout": 120,
+  "scope_timeout": 300,
+  "batch_size": 500,
+  "exclude": [],
+  "image": "specmind-paper-eval-mutmut-py312:latest",
+  "mutmut_timeout": 1800
+}

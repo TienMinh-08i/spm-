@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 
 from .report import report
-from .runner import run
 from .storage import read
 
 DEFAULTS = {
@@ -32,8 +31,13 @@ DEFAULTS = {
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "prepare":
+        from .preparation.cli import main as prepare_main
+        return prepare_main(sys.argv[2:])
+    from .runner import run
     parser = argparse.ArgumentParser(description="Independent SpecMind dataset evaluation")
     sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("prepare", help="Offline extraction and dataset preparation; use prepare --help")
     run_parser = sub.add_parser("run")
     run_parser.add_argument("--config", type=Path, required=True)
     run_parser.add_argument("--output", type=Path, required=True)
@@ -219,4 +223,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

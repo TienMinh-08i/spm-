@@ -1,0 +1,47 @@
+{
+  "baseline_commit": "8297ae2bbadbca11bf6e8755abf9870261ef4665",
+  "tests": 93,
+  "differences": {
+    "dataset.py": false,
+    "dataset_filter.py": true,
+    "debug.py": true,
+    "evaluation.py": true,
+    "execution.py": true,
+    "metrics.py": true,
+    "mutant_worker.py": false,
+    "mutation_runtime.py": false,
+    "mutation_scope.py": true,
+    "mutmut.py": false,
+    "prepare_dataset.py": true,
+    "prepare_mutants.py": true,
+    "prepare_tests.py": true,
+    "provenance.py": true,
+    "pytest_plugin.py": true,
+    "source.py": false,
+    "storage.py": true,
+    "__init__.py": true
+  },
+  "namespace_normalized_ast_equivalent": [
+    "dataset_filter.py",
+    "evaluation.py",
+    "metrics.py",
+    "mutation_scope.py",
+    "prepare_dataset.py",
+    "prepare_tests.py",
+    "provenance.py",
+    "pytest_plugin.py",
+    "storage.py"
+  ],
+  "execution_difference": "Only package-root PYTHONPATH depth differs, retained V2 implementation.",
+  "mutation_difference": "Standalone supports external checkout mount; adapted into the single V2 orchestrator.",
+  "debug_difference": "Standalone has reduced helpers; keep full V2 debugging implementation.",
+  "historical_dataset": {
+    "functions": 57,
+    "test_links": 9502,
+    "unique_tests": 889,
+    "excluded": {
+      "marshmallow.fields.Nested.schema": "Old artifact reports property inspection error",
+      "marshmallow.schema.Schema.__apply_nested_option": "Old artifact reports private-name lookup error"
+    }
+  }
+}

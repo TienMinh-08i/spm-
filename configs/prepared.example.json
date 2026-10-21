@@ -1,7 +1,7 @@
 {
   "repo_root": "../checkouts/marshmallow",
-  "prepared_dataset": "../artifacts/dataset",
-  "prepared_mutants": "../artifacts/mutants",
+  "prepared_dataset": "../artifacts/marshmallow/prepared",
+  "prepared_mutants": "../artifacts/marshmallow/mutants",
   "context_mode": "none",
   "max_turns": 24,
   "batch_size": 500,

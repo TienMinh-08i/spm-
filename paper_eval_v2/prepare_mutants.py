@@ -11,9 +11,7 @@ from .debug import separate_output
 
 def prepare_mutants(scope,repo,output,*,resume=False,image='specmind-paper-eval-mutmut-py312:latest',timeout=1800):
     scope,repo=Path(scope).resolve(),Path(repo).resolve()
-    workspace=Path(__file__).resolve().parent.parent
-    if workspace not in repo.parents:
-        raise ValueError('Docker repo must be inside workspace')
+    workspace=Path(__file__).resolve().parent
     output=separate_output(output,scope,repo)
     rows,targets,scope_manifest=load_scope(scope,repo)
     inspected=subprocess.run(['docker','image','inspect',image,'--format','{{.Id}}'],capture_output=True,text=True,check=True)
@@ -36,11 +34,12 @@ def prepare_mutants(scope,repo,output,*,resume=False,image='specmind-paper-eval-
                   'implementation':implementation,'files':{},'timeout':timeout}
         write(output/'manifest.json',manifest)
         write(output/'targets_input.json',targets)
-        command=['docker','run','--rm','--mount',f'type=bind,source={workspace.as_posix()},target=/workspace,readonly',
+        command=['docker','run','--rm','--mount',f'type=bind,source={workspace.as_posix()},target=/workspace/paper_eval_v2,readonly',
                  '--mount',f'type=bind,source={output.as_posix()},target=/artifacts',
+                 '--mount',f'type=bind,source={repo.as_posix()},target=/target_repo,readonly',
                  '-e','PYTHONPATH=/workspace','-e','PYTHONUNBUFFERED=1',image_id,
                  'python','-m','paper_eval_v2.mutant_worker','--input','/artifacts/targets_input.json',
-                 '--repo','/workspace/'+repo.relative_to(workspace).as_posix(),
+                 '--repo','/target_repo',
                  '--output','/artifacts','--timeout',str(timeout)]
         with (output/'docker.log').open('a',encoding='utf-8') as log:
             process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace')
