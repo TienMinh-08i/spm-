@@ -2,6 +2,7 @@ import pytest
 
 from paper_eval_v2.metrics import mutation_metrics
 from paper_eval_v2.specmind import generate
+import paper_eval_v2.specmind as generation_module
 
 
 def test_union_and_new_kills_with_unknowns():
@@ -66,7 +67,7 @@ def test_context_none_preserves_baseline_prompt(tmp_path, mode):
     from pathlib import Path
 
     source = "def f(): return 1"
-    template = Path(__file__).parents[1].joinpath("prompts", mode + ".txt").read_text(encoding="utf-8")
+    template = Path(generation_module.__file__).with_name("prompts").joinpath(mode + ".txt").read_text(encoding="utf-8")
     for key, value in {
         "function_code": source,
         "codeStubAndDocstring": source,

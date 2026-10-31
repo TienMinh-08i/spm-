@@ -23,7 +23,7 @@ packages = ["paper_eval_v2", "paper_eval_v2.preparation"]
 paper_eval_v2 = ["prompts/*.txt", "provenance.json"]
 
 [tool.pytest.ini_options]
-testpaths = ["paper_eval_v2/tests"]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 110
