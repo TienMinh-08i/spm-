@@ -17,7 +17,7 @@ marshmallow = ["simplejson==3.20.2", "tzdata==2025.2"]
 specmind-eval = "paper_eval_v2.__main__:main"
 
 [tool.setuptools]
-packages = ["paper_eval_v2", "paper_eval_v2.preparation", "paper_eval_v2.common"]
+packages = ["paper_eval_v2", "paper_eval_v2.preparation", "paper_eval_v2.common", "paper_eval_v2.inputs"]
 
 [tool.setuptools.package-data]
 paper_eval_v2 = ["prompts/*.txt", "provenance.json"]

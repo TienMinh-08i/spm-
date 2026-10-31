@@ -19,7 +19,7 @@ def prepare_mutants(scope,repo,output,*,resume=False,image='specmind-paper-eval-
     image_id=inspected.stdout.strip()
     implementation={name:file_hash(Path(__file__).parent / name) for name in
                     ('prepare_mutants.py','mutant_worker.py','mutmut.py','mutation_runtime.py',
-                     'source.py','dataset.py','execution.py','common/storage.py','prepare_dataset.py','common/fingerprint.py')}
+                     'source.py','dataset.py','execution.py','common/storage.py','prepare_dataset.py','common/fingerprint.py','inputs/prepared.py')}
     fingerprint=digest({'scope':scope_manifest['fingerprint'],'scope_files':scope_manifest['files'],
                         'implementation':implementation,'image':image_id,'timeout':timeout})
     with run_lock(output):
@@ -87,20 +87,3 @@ def prepare_mutants(scope,repo,output,*,resume=False,image='specmind-paper-eval-
                         files={name:file_hash(output/name) for name in ('functions.json','summary.json','targets_input.json')})
         write(output/'manifest.json',manifest)
     return summary
-
-
-def load_prepared_mutants(output,repo,dataset_manifest):
-    """Read/verify only, no Docker, generation or discovery in main loop."""
-    output=Path(output).resolve()
-    manifest=read(output/'manifest.json')
-    if not manifest or manifest.get('schema')!='prepared-mutants-v1' or not manifest.get('complete'):
-        raise ValueError('Prepared mutants missing or incomplete')
-    if manifest['source_environment']!=source_environment(repo):
-        raise ValueError('Prepared mutants source/environment mismatch')
-    if manifest['dataset_fingerprint']!=dataset_manifest['fingerprint'] or manifest['dataset_files']!=dataset_manifest['files']:
-        raise ValueError('Prepared mutants do not belong to this dataset')
-    for name,value in manifest['files'].items():
-        if Path(name).name!=name or file_hash(output/name)!=value:
-            raise ValueError('Prepared mutant artifact mismatch: '+name)
-    rows=read(output/'functions.json')
-    return {r['function']:r for r in rows},manifest

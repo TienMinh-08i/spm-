@@ -34,7 +34,7 @@ def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
     env = source_environment(repo)
     implementation = {n: file_hash(Path(__file__).parent / n) for n in
                       ('prepare_dataset.py', 'prepare_tests.py', 'dataset_filter.py', 'pytest_plugin.py',
-                       'execution.py', 'dataset.py', 'evaluation.py', 'common/fingerprint.py', 'common/storage.py', 'common/jsonl.py', 'common/outputs.py')}
+                       'execution.py', 'dataset.py', 'evaluation.py', 'common/fingerprint.py', 'common/storage.py', 'common/jsonl.py', 'common/outputs.py', 'inputs/prepared.py')}
     fingerprint = digest({'problems': file_hash(problems), 'tests': file_hash(tests),
                           'candidates': candidates, 'environment': env, 'implementation': implementation,
                           'timeout': timeout, 'batch_size': batch_size})
@@ -116,24 +116,3 @@ def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
                                ('problems.jsonl', 'tests.jsonl', 'results.json', 'excluded_functions.json', 'summary.json')})
         write(output/'manifest.json', manifest)
     return summary
-
-
-def load_prepared_dataset(directory, repo):
-    """Read/validate only. Never runs pytest, filters tests or creates mutants."""
-    directory, repo = Path(directory).resolve(), Path(repo).resolve()
-    manifest = read(directory/'manifest.json')
-    if not manifest or manifest.get('schema') != SCHEMA or not manifest.get('complete'):
-        raise ValueError('Dataset preparation missing or incomplete')
-    if source_environment(repo) != manifest['source_environment']:
-        raise ValueError('Prepared dataset source/environment mismatch')
-    for name, expected in manifest['files'].items():
-        if Path(name).name != name or file_hash(directory/name) != expected:
-            raise ValueError('Prepared dataset artifact mismatch: '+name)
-    problems, tests = load(directory/'problems.jsonl', directory/'tests.jsonl')
-    results = {r['function']: r for r in read(directory/'results.json')}
-    for problem in problems:
-        key = problem.get('problem_id') or problem['task_id']
-        record = results.get(key, {})
-        if record.get('status') != 'ready' or digest(tests.get(key, [])) != digest(record.get('tests', [])):
-            raise ValueError('Prepared test evidence mismatch: '+key)
-    return problems, tests, manifest

@@ -174,7 +174,7 @@ def main(argv=None):
                 args.scope, args.repo, args.output, timeout=args.timeout, image=args.image, resume=args.resume
             )
         elif args.command == "validate":
-            from ..prepare_dataset import load_prepared_dataset
+            from paper_eval_v2.inputs.prepared import load_prepared_dataset
             from paper_eval_v2.common.fingerprint import source_environment
 
             result = {}
@@ -193,7 +193,7 @@ def main(argv=None):
                 rows, targets, m = load_scope(args.scope, args.repo)
                 result["scope"] = {"functions": len(rows), "targets": len(targets)}
             if args.mutants:
-                from ..prepare_mutants import load_prepared_mutants
+                from paper_eval_v2.inputs.prepared import load_prepared_mutants
 
                 if not manifest:
                     raise ValueError("--mutants requires --dataset")

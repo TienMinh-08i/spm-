@@ -12,8 +12,8 @@ from .context import CallGraph, build_context_pack
 from paper_eval_v2.common.git import verify_commit
 from .evaluation import Evaluator
 from .mutants import export_bundle_digest, prepare
-from .prepare_dataset import load_prepared_dataset
-from .prepare_mutants import load_prepared_mutants
+from paper_eval_v2.inputs.prepared import load_prepared_dataset
+from paper_eval_v2.inputs.prepared import load_prepared_mutants
 from .report import report
 from .specmind import generate
 from paper_eval_v2.common.fingerprint import digest, tree_digest

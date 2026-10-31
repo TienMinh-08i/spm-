@@ -5,7 +5,8 @@ import sys
 from pathlib import Path
 import pytest
 from paper_eval_v2.preparation.extract import extract
-from paper_eval_v2.prepare_dataset import prepare_dataset, load_prepared_dataset
+from paper_eval_v2.prepare_dataset import prepare_dataset
+from paper_eval_v2.inputs.prepared import load_prepared_dataset
 from paper_eval_v2.mutation_scope import prepare_scope, body_line_count
 from paper_eval_v2.common.storage import read
 from paper_eval_v2.preparation.cli import main

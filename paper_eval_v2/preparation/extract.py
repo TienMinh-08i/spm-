@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from ..mutation_scope import source_index
+from paper_eval_v2.preparation.source_index import source_index
 from paper_eval_v2.common.fingerprint import source_environment, file_hash
 from paper_eval_v2.common.jsonl import write_jsonl
 from paper_eval_v2.common.fingerprint import digest, tree_digest

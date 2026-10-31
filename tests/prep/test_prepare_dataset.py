@@ -1,7 +1,8 @@
 import json
 import pytest
 
-from paper_eval_v2.prepare_dataset import prepare_dataset, load_prepared_dataset
+from paper_eval_v2.prepare_dataset import prepare_dataset
+from paper_eval_v2.inputs.prepared import load_prepared_dataset
 from paper_eval_v2.common.storage import read
 
 

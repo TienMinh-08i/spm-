@@ -125,8 +125,8 @@ def main():
             print(json.dumps(result,indent=2))
             sys.exit(2)
     elif args.command == 'validate-mutants':
-        from .prepare_dataset import load_prepared_dataset
-        from .prepare_mutants import load_prepared_mutants
+        from paper_eval_v2.inputs.prepared import load_prepared_dataset
+        from paper_eval_v2.inputs.prepared import load_prepared_mutants
         problems, tests, dm = load_prepared_dataset(args.dataset, args.repo_root)
         rows, mm = load_prepared_mutants(args.mutants, args.repo_root, dm)
         wanted = {p['problem_id'] for p in problems}
@@ -142,7 +142,7 @@ def main():
             print(json.dumps(result, indent=2))
             sys.exit(2)
     elif args.command == 'validate-dataset':
-        from .prepare_dataset import load_prepared_dataset
+        from paper_eval_v2.inputs.prepared import load_prepared_dataset
         problems, tests, manifest = load_prepared_dataset(args.dataset, args.repo_root)
         result = {'valid': True, 'functions': len(problems), 'test_links': sum(map(len, tests.values())),
                   'fingerprint': manifest['fingerprint']}
