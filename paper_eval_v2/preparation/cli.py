@@ -27,14 +27,7 @@ def check_raw(directory):
     return m
 
 
-def main(argv=None):
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-    if hasattr(sys.stderr, "reconfigure"):
-        sys.stderr.reconfigure(encoding="utf-8")
-    # Used by child pytest processes even when launched via run.py without pip install.
-    src = str(Path(__file__).resolve().parents[2])
-    os.environ["PYTHONPATH"] = os.pathsep.join([src, os.environ.get("PYTHONPATH", "")])
+def build_parser():
     parser = argparse.ArgumentParser(description="Marshmallow offline preparation (shared V2 engine; no LLM)")
     parser.add_argument("--traceback", action="store_true", help="Show full Python traceback for debugging")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -97,6 +90,18 @@ def main(argv=None):
     allp.add_argument("--config", type=path, required=True)
     allp.add_argument("--resume", action="store_true")
     allp.add_argument("--through", choices=["dataset", "scope", "mutants"], default="dataset")
+    return parser
+
+
+def main(argv=None):
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8")
+    # Used by child pytest processes even when launched via run.py without pip install.
+    src = str(Path(__file__).resolve().parents[2])
+    os.environ["PYTHONPATH"] = os.pathsep.join([src, os.environ.get("PYTHONPATH", "")])
+    parser = build_parser()
     args = parser.parse_args(argv)
     try:
         from paper_eval_v2.common.storage import read
