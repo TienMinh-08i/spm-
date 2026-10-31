@@ -52,71 +52,8 @@ def static_candidates(problem, index):
     return result
 
 
-TRACE_PLUGIN = r'''
-import json, os, sys, threading
-from collections import defaultdict
-from pathlib import Path
-import pytest
-
-config=json.loads(Path(os.environ['SPECMIND_SCOPE_CONFIG']).read_text())
-locations={(str(Path(p).resolve()).casefold(),int(line)):key for p,line,key in config['locations']}
-short=set(config['short'])
-allowed={k:set(v) for k,v in config['allowed'].items()}
-edges=defaultdict(set)
-external=defaultdict(set)
-calls=defaultdict(set)
-current=None
-cache={}
-
-def key(code):
-    if code not in cache:
-        cache[code]=locations.get((str(Path(code.co_filename).resolve()).casefold(),code.co_firstlineno))
-    return cache[code]
-
-def parent(frame):
-    caller=frame.f_back
-    # Comprehensions are part of the lexical function, not a second scope level.
-    while caller and caller.f_code.co_name in ('<genexpr>','<listcomp>','<dictcomp>','<setcomp>'):
-        caller=caller.f_back
-    return caller
-
-def profile(frame,event,arg):
-    if current is None:
-        return
-    if event=='call':
-        target=key(frame.f_code)
-        if target and current in allowed.get(target,set()):
-            calls[target].add(current)
-        caller=parent(frame)
-        origin=key(caller.f_code) if caller else None
-        if origin in short and current in allowed.get(origin,set()):
-            if target:
-                edges[(origin,target)].add(current)
-            elif not frame.f_code.co_name.startswith('<'):
-                external[origin].add(frame.f_code.co_filename+':'+frame.f_code.co_qualname)
-    elif event=='c_call':
-        origin=key(frame.f_code)
-        if origin in short and current in allowed.get(origin,set()):
-            external[origin].add((getattr(arg,'__module__','') or '')+'.'+getattr(arg,'__qualname__',str(type(arg))))
-
-@pytest.hookimpl(hookwrapper=True,tryfirst=True)
-def pytest_runtest_call(item):
-    global current
-    current=item.nodeid
-    before=sys.getprofile()
-    sys.setprofile(profile)
-    try:
-        yield
-    finally:
-        sys.setprofile(before)
-        current=None
-
-def pytest_sessionfinish(session,exitstatus):
-    Path(os.environ['SPECMIND_SCOPE_RESULT']).write_text(json.dumps({
-        'edges':[{'caller':a,'callee':b,'nodeids':sorted(nodes)} for (a,b),nodes in edges.items()],
-        'external':{k:sorted(v) for k,v in external.items()},
-        'calls':{k:sorted(v) for k,v in calls.items()},'exitstatus':exitstatus}),encoding='utf-8')
-'''
+TRACE_PLUGIN_PATH = Path(__file__).resolve().parents[1] / "injected" / "scope_trace_plugin.py"
+TRACE_PLUGIN = TRACE_PLUGIN_PATH.read_text(encoding="utf-8")
 
 
 def prepare_scope(dataset, repo, output, *, resume=False, timeout=300):
@@ -126,7 +63,8 @@ def prepare_scope(dataset, repo, output, *, resume=False, timeout=300):
     index, locations = source_index(repo)
     short = {p['problem_id'] for p in problems if body_line_count(function_code(p)) < 5}
     fingerprint = digest({'dataset': manifest['fingerprint'], 'files': manifest['files'],
-                          'environment': source_environment(repo), 'code': file_hash(__file__), 'timeout': timeout})
+                          'environment': source_environment(repo), 'code': digest({'scope': file_hash(__file__), 'plugin': file_hash(TRACE_PLUGIN_PATH),
+                                          'source_index': file_hash(Path(__file__).resolve().parents[1] / 'source_index.py')}), 'timeout': timeout})
     with run_lock(output):
         previous = read(output/'manifest.json')
         if previous and not resume:
