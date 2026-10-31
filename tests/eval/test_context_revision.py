@@ -4,10 +4,10 @@ import ast
 import json
 import pytest
 
-from paper_eval_v2.context import CallGraph, build_context_pack, callee_contract
-from paper_eval_v2.candidate import refresh
-from paper_eval_v2.specmind import generate
-from paper_eval_v2.metrics import mutation_metrics
+from specmind_eval.context.callgraph import CallGraph, build_context_pack, callee_contract
+from specmind_eval.evaluate.candidate import refresh
+from specmind_eval.generate.loop import generate
+from specmind_eval.evaluate.metrics import mutation_metrics
 
 
 def test_callee_excludes_body_nested_docs_and_decorators():
@@ -101,7 +101,7 @@ def test_empty_context_has_same_prompt_as_baseline(tmp_path):
 
 def test_runtime_usage_changes_graph_identity(tmp_path):
     import hashlib
-    from paper_eval_v2.common.storage import write
+    from specmind_eval.common.storage import write
     write(tmp_path/'nodes.json', [{'id': 'm.f', 'source': 'def f(): pass'}])
     write(tmp_path/'edges.json', [])
     usage = [{'function_id': 'm.f', 'nodeid': 'tests/t.py::test_x', 'file': 'tests/t.py',

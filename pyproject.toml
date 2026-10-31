@@ -14,16 +14,19 @@ mutation = ["mutmut==2.5.1"]
 marshmallow = ["simplejson==3.20.2", "tzdata==2025.2"]
 
 [project.scripts]
-specmind-eval = "paper_eval_v2.cli:main"
+specmind-eval = "specmind_eval.cli:main"
+specmind-prep = "specmind_prep.cli:main"
 
-[tool.setuptools]
-packages = ["paper_eval_v2", "paper_eval_v2.preparation", "paper_eval_v2.common", "paper_eval_v2.inputs"]
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.setuptools.package-data]
-paper_eval_v2 = ["prompts/*.txt", "provenance.json"]
+"specmind_eval.generate" = ["prompts/*.txt"]
+specmind_eval = ["provenance.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 110

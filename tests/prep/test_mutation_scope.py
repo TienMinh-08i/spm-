@@ -1,11 +1,11 @@
 import sys
 import types
 import pytest
-from paper_eval_v2.mutation_scope import body_line_count
-from paper_eval_v2.mutant_worker import executable_ast
-from paper_eval_v2.mutation_runtime import compile_mutant
-from paper_eval_v2.evaluation import Evaluator
-from paper_eval_v2.suite_evaluation import suite_outcome
+from specmind_prep.scope.scope import body_line_count
+from specmind_prep.mutants.worker import executable_ast
+from specmind_eval.evaluate.injected.mutation_runtime import compile_mutant
+from specmind_eval.evaluate.evaluator import Evaluator
+from specmind_eval.offline.suite import suite_outcome
 
 
 def test_scope_threshold_and_non_code_lines():

@@ -2,9 +2,9 @@ import json
 
 import pytest
 
-from paper_eval_v2.evaluation import Evaluator
-from paper_eval_v2.common.storage import read, write
-from paper_eval_v2.suite_evaluation import evaluate_suite
+from specmind_eval.evaluate.evaluator import Evaluator
+from specmind_eval.common.storage import read, write
+from specmind_eval.offline.suite import evaluate_suite
 
 
 def test_offline_suite_has_separate_artifacts_and_reuses_cache(tmp_path, monkeypatch):
@@ -38,7 +38,7 @@ def test_offline_suite_has_separate_artifacts_and_reuses_cache(tmp_path, monkeyp
     rows = read(output / "functions/f/result.json")["mutants"]
     assert [r["suite_killed"] for r in rows] == [True, False]
     assert all((output / "functions/f/arms" / (r["neutral_arm"] + ".json")).is_file() for r in rows)
-    monkeypatch.setattr("paper_eval_v2.evaluation.run_pytest_postcondition",
+    monkeypatch.setattr("specmind_eval.evaluate.evaluator.run_pytest_postcondition",
                         lambda **kw: pytest.fail("Cached suite was rerun"))
     assert evaluate_suite(run, output) == summary
     assert {str(p): p.read_bytes() for p in run.rglob("*") if p.is_file()} == before

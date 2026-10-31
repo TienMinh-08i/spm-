@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from paper_eval_v2.context import CallGraph, build_context_pack
-from paper_eval_v2.report import token_usage
+from specmind_eval.context.callgraph import CallGraph, build_context_pack
+from specmind_eval.report import token_usage
 
 
 def test_modes_budget_and_direct_neighbors():
@@ -49,7 +49,7 @@ def test_graph_checksum_and_checkout_guards(tmp_path, monkeypatch):
         },
     }
     (graph_dir / "manifest.json").write_text(json.dumps(manifest))
-    monkeypatch.setattr("paper_eval_v2.context.verify_commit", lambda *a: None)
+    monkeypatch.setattr("specmind_eval.context.callgraph.verify_commit", lambda *a: None)
     assert CallGraph.load(graph_dir, repo).nodes["f"]
     (repo / "f.py").write_text("def f(): return 2")
     with pytest.raises(ValueError, match="version mismatch"):

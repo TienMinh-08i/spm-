@@ -1,9 +1,9 @@
 import pytest
-from paper_eval_v2.dataset import pytest_nodeid
-from paper_eval_v2.policy import validate
-from paper_eval_v2.specmind import generate
-from paper_eval_v2.metrics import mutation_metrics
-from paper_eval_v2.evaluation import Evaluator
+from specmind_eval.inputs.dataset import pytest_nodeid
+from specmind_eval.evaluate.policy import validate
+from specmind_eval.generate.loop import generate
+from specmind_eval.evaluate.metrics import mutation_metrics
+from specmind_eval.evaluate.evaluator import Evaluator
 
 
 @pytest.mark.parametrize('suffix', ['test_x[1.2]', 'C.test_x[01:23:45.123456+00:00]', 'C.Inner.test_x[a.b]'])
@@ -71,7 +71,7 @@ def test_cache_normalizes_comments_but_not_tests_or_identity(tmp_path, monkeypat
     def run(**kwargs):
         calls.append(kwargs)
         return 'pass', {'events': [], 'logs': ['full log']}
-    monkeypatch.setattr('paper_eval_v2.evaluation.run_pytest_postcondition', run)
+    monkeypatch.setattr('specmind_eval.evaluate.evaluator.run_pytest_postcondition', run)
     config = {'pytest_timeout': 1, 'batch_size': 1, '_evaluation_identity': 'same'}
     ev = Evaluator({}, [{'test_id': 'a'}], tmp_path, tmp_path/'out', config)
     ev.arm('assert True')

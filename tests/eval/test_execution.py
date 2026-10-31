@@ -1,7 +1,7 @@
 import pytest
 
-from paper_eval_v2.evaluation import Evaluator
-from paper_eval_v2.suite_evaluation import suite_outcome
+from specmind_eval.evaluate.evaluator import Evaluator
+from specmind_eval.offline.suite import suite_outcome
 
 
 @pytest.fixture
@@ -79,7 +79,7 @@ def test_original_assert_false_is_correctness_fail(evaluator):
 
 
 def test_two_probe_filter_excludes_uncalled_exception_swallowed_and_failing_tests(tmp_path):
-    from paper_eval_v2.dataset_filter import filter_tests
+    from specmind_prep.filter.probe import filter_tests
     source = 'def f(x=0):\n    if x < 0:\n        raise ValueError("negative")\n    return x + 1\n'
     (tmp_path / 'target.py').write_text(source)
     (tmp_path / 'test_filter.py').write_text(
@@ -104,7 +104,7 @@ def test_two_probe_filter_excludes_uncalled_exception_swallowed_and_failing_test
 
 
 def test_two_probe_filter_with_no_observable_failure_is_unavailable(tmp_path):
-    from paper_eval_v2.dataset_filter import filter_tests
+    from specmind_prep.filter.probe import filter_tests
     source = 'def f():\n    return 1\n'
     (tmp_path/'target.py').write_text(source)
     (tmp_path/'test_filter.py').write_text(
@@ -155,7 +155,7 @@ def test_invalid_nodeids_do_not_discard_observed_assertion_events(evaluator, mon
                 stream.write(json.dumps({"nodeid": "test_f.py::test_original", "kind": kind}) + "\n")
         return SimpleNamespace(returncode=4, stdout="ERROR: found no collectors for test_f.py::test_usage")
 
-    monkeypatch.setattr("paper_eval_v2.execution.subprocess.run", fake_run)
+    monkeypatch.setattr("specmind_eval.evaluate.pytest_runner.subprocess.run", fake_run)
     result = evaluator.correctness("assert False")
     assert result["status"] == "fail"
     assert result["assertion_violations"] > 0
@@ -227,7 +227,7 @@ def test_method_descriptor_preserved(tmp_path, kind, legacy):
 ])
 def test_descriptor_guard_rejects_real_mismatches(tmp_path, expected, runtime, reason):
     import importlib.util
-    from paper_eval_v2.pytest_plugin import _verify_runtime
+    from specmind_eval.evaluate.injected.postcondition_plugin import _verify_runtime
 
     path = tmp_path / "target.py"
     path.write_text("class C:\n    @classmethod\n    def f(cls, x):\n        return x + 1\n")
@@ -241,7 +241,7 @@ def test_descriptor_guard_rejects_real_mismatches(tmp_path, expected, runtime, r
 
 def test_legacy_descriptor_normalization_preserves_other_decorators(tmp_path):
     import importlib.util
-    from paper_eval_v2.pytest_plugin import _verify_runtime
+    from specmind_eval.evaluate.injected.postcondition_plugin import _verify_runtime
 
     path = tmp_path / "target.py"
     path.write_text(

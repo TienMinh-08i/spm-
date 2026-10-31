@@ -1,8 +1,8 @@
 import pytest
 
-from paper_eval_v2.metrics import mutation_metrics
-from paper_eval_v2.specmind import generate
-import paper_eval_v2.specmind as generation_module
+from specmind_eval.evaluate.metrics import mutation_metrics
+from specmind_eval.generate.loop import generate
+import specmind_eval.generate.loop as generation_module
 
 
 def test_union_and_new_kills_with_unknowns():

@@ -1,9 +1,9 @@
 import json
 import pytest
 
-from paper_eval_v2.prepare_dataset import prepare_dataset
-from paper_eval_v2.inputs.prepared import load_prepared_dataset
-from paper_eval_v2.common.storage import read
+from specmind_prep.filter.dataset import prepare_dataset
+from specmind_eval.inputs.prepared import load_prepared_dataset
+from specmind_eval.common.storage import read
 
 
 @pytest.fixture
@@ -44,8 +44,8 @@ def test_offline_prepare_resume_validate_and_tampering(inputs, monkeypatch):
     assert decisions['test_f.py::test_swallowed'] == 'false_did_not_fail_test'
     def forbidden(*a, **k):
         pytest.fail('Read-only loader/resume ran pytest')
-    monkeypatch.setattr('paper_eval_v2.evaluation.run_pytest_postcondition', forbidden)
-    monkeypatch.setattr('paper_eval_v2.prepare_dataset.prepare_tests', forbidden)
+    monkeypatch.setattr('specmind_eval.evaluate.evaluator.run_pytest_postcondition', forbidden)
+    monkeypatch.setattr('specmind_prep.filter.dataset.prepare_tests', forbidden)
     assert prepare_dataset(*inputs, resume=True)['selected_links'] == 1
     problems, tests, manifest = load_prepared_dataset(output, repo)
     assert len(problems) == 1 and len(tests['target.f']) == 1 and manifest['complete']
@@ -69,7 +69,7 @@ def test_loader_rejects_incomplete_and_source_change(inputs):
 def test_pending_probe_does_not_publish_partial_dataset(inputs, monkeypatch):
     def timeout(*a, **kw):
         return 'timeout', {'events': [], 'logs': ['TIMEOUT']}
-    monkeypatch.setattr('paper_eval_v2.evaluation.run_pytest_postcondition', timeout)
+    monkeypatch.setattr('specmind_eval.evaluate.evaluator.run_pytest_postcondition', timeout)
     summary = prepare_dataset(*inputs)
     assert summary['pending_functions'] == 1 and summary['selected_links'] == 0
     assert not read(inputs[-1]/'manifest.json')['complete']

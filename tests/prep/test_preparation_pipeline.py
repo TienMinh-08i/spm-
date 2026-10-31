@@ -4,12 +4,12 @@ import subprocess
 import sys
 from pathlib import Path
 import pytest
-from paper_eval_v2.preparation.extract import extract
-from paper_eval_v2.prepare_dataset import prepare_dataset
-from paper_eval_v2.inputs.prepared import load_prepared_dataset
-from paper_eval_v2.mutation_scope import prepare_scope, body_line_count
-from paper_eval_v2.common.storage import read
-from paper_eval_v2.preparation.cli import main
+from specmind_prep.extract.extract import extract
+from specmind_prep.filter.dataset import prepare_dataset
+from specmind_eval.inputs.prepared import load_prepared_dataset
+from specmind_prep.scope.scope import prepare_scope, body_line_count
+from specmind_eval.common.storage import read
+from specmind_prep.cli import main
 
 
 @pytest.fixture(scope="module")
@@ -182,9 +182,9 @@ def test_output_guards_and_fingerprints(prepared, tmp_path):
 
 
 def test_isolated_entrypoint_and_no_main_imports(tmp_path):
-    source = Path(__file__).resolve().parents[2]
+    source = Path(__file__).resolve().parents[2] / "src"
     env = dict(os.environ, PYTHONPATH=str(source))
-    command = "import sys; import paper_eval_v2.preparation.cli, paper_eval_v2.preparation.extract, paper_eval_v2.prepare_mutants; assert not any(k=='paper_eval' or k.startswith('paper_eval.') or k=='specmind_test' or k.startswith('specmind_test.') or k=='openai' for k in sys.modules); print('isolated')"
+    command = "import sys; import specmind_prep.cli, specmind_prep.extract.extract, specmind_prep.mutants.corpus; assert not any(k=='paper_eval' or k.startswith('paper_eval.') or k=='specmind_test' or k.startswith('specmind_test.') or k=='openai' for k in sys.modules); print('isolated')"
     proc = subprocess.run(
         [sys.executable, "-I", "-c", f"import sys;sys.path.insert(0,{str(source)!r});" + command],
         cwd=tmp_path,
@@ -203,9 +203,9 @@ def test_explicit_exclusion_requires_reason(prepared, tmp_path):
 
 
 def test_docker_mounts_external_repo_and_maps_callee(tmp_path, monkeypatch):
-    import paper_eval_v2.prepare_mutants as module
-    from paper_eval_v2.common.fingerprint import digest
-    from paper_eval_v2.common.storage import write
+    import specmind_prep.mutants.corpus as module
+    from specmind_eval.common.fingerprint import digest
+    from specmind_eval.common.storage import write
 
     repo = tmp_path / "external checkout"
     repo.mkdir()
@@ -264,14 +264,14 @@ def test_docker_mounts_external_repo_and_maps_callee(tmp_path, monkeypatch):
     result = module.prepare_mutants(scope, repo, out, image="test-image")
     assert result["function_mutant_pairs"] == 1
     cmd = commands[0]
-    assert "paper_eval_v2.mutant_worker" in cmd
+    assert "specmind_prep.mutants.worker" in cmd
     assert any(f"source={repo.as_posix()},target=/target_repo,readonly" in x for x in cmd)
     assert "/target_repo" in cmd
     assert read(out / "functions.json")[0]["mutants"][0]["kind"] == "callee"
 
 
 def test_documented_filter_is_optional(prepared, tmp_path):
-    from paper_eval_v2.preparation.documentation import collect_problems, collect_documented_symbols, _problem_is_documented
+    from specmind_prep.extract.documented_symbols import collect_problems, collect_documented_symbols, _problem_is_documented
     import shutil
 
     repo = tmp_path / "checkout"
@@ -293,9 +293,9 @@ def test_invalid_config_rejected_before_execution(tmp_path):
 
 
 def test_module_cli_propagates_failure(tmp_path):
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[2] / "src"
     proc = subprocess.run(
-        [sys.executable, "-m", "paper_eval_v2", "prepare", "inspect", "--output", str(tmp_path)],
+        [sys.executable, "-m", "specmind_eval", "prepare", "inspect", "--output", str(tmp_path)],
         cwd=root,
         capture_output=True,
         text=True,
@@ -306,7 +306,7 @@ def test_module_cli_propagates_failure(tmp_path):
 
 def test_raw_hash_tampering_rejected(prepared, tmp_path):
     import shutil
-    from paper_eval_v2.preparation.cli import check_raw
+    from specmind_prep.cli import check_raw
 
     raw = tmp_path / "raw"
     shutil.copytree(prepared[2], raw)
@@ -318,10 +318,10 @@ def test_raw_hash_tampering_rejected(prepared, tmp_path):
 
 @pytest.mark.parametrize("pipeline", [False, True])
 def test_incomplete_mutants_return_nonzero(tmp_path, monkeypatch, pipeline):
-    import paper_eval_v2.prepare_mutants as mutants
-    import paper_eval_v2.prepare_dataset as dataset
-    import paper_eval_v2.mutation_scope as scope
-    import paper_eval_v2.preparation.extract as extraction
+    import specmind_prep.mutants.corpus as mutants
+    import specmind_prep.filter.dataset as dataset
+    import specmind_prep.scope.scope as scope
+    import specmind_prep.extract.extract as extraction
 
     monkeypatch.setattr(mutants, "prepare_mutants", lambda *a, **kw: {"pending_targets": 1})
     if pipeline:

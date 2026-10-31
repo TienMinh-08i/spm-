@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from paper_eval_v2.config import DEFAULTS
-from paper_eval_v2.mutants import prepare
-from paper_eval_v2.runner import run
-from paper_eval_v2.common.storage import read, write
+from specmind_eval.config import DEFAULTS
+from specmind_eval.legacy_mutants import prepare
+from specmind_eval.run import run
+from specmind_eval.common.storage import read, write
 
 
 def attach_graph(config, root):
@@ -41,7 +41,7 @@ def test_context_is_saved_and_graph_change_blocks_resume(setup, monkeypatch):
 
     config, output, _ = setup
     graph = attach_graph(config, output.parent)
-    monkeypatch.setattr("paper_eval_v2.context.verify_commit", lambda *a: None)
+    monkeypatch.setattr("specmind_eval.context.callgraph.verify_commit", lambda *a: None)
     config["context_mode"] = "callee"
     run(config, output)
     directory = next((output / "functions").iterdir())
@@ -76,11 +76,11 @@ def test_no_mutants_can_still_generate_correctness(setup):
 
 
 def test_experiment_and_common_corpus_comparison(setup, monkeypatch):
-    from paper_eval_v2.experiment import experiment, compare
+    from specmind_eval.experiment import experiment, compare
 
     config, output, _ = setup
     attach_graph(config, output.parent)
-    monkeypatch.setattr("paper_eval_v2.context.verify_commit", lambda *a: None)
+    monkeypatch.setattr("specmind_eval.context.callgraph.verify_commit", lambda *a: None)
     result = experiment(config, output)
     assert result == {"rows": 4, "functions": 1, "unfinished": 0}
     rows = read(output / "comparison.json")
@@ -149,7 +149,7 @@ def test_end_to_end_and_resume(setup, monkeypatch):
     def forbidden(*args):
         raise AssertionError("Completed function was reevaluated")
 
-    monkeypatch.setattr("paper_eval_v2.runner.Evaluator", forbidden)
+    monkeypatch.setattr("specmind_eval.run.Evaluator", forbidden)
     assert run(config, output, resume=True) == summary
     with pytest.raises(ValueError, match="Run exists"):
         run(config, output)
@@ -159,16 +159,16 @@ def test_end_to_end_and_resume(setup, monkeypatch):
 
 
 def test_debug_replay_and_join_are_offline_and_preserve_run(setup, monkeypatch):
-    from paper_eval_v2.debug import replay
-    from paper_eval_v2.join import join_suite
-    from paper_eval_v2.suite_evaluation import evaluate_suite
+    from specmind_eval.offline.replay import replay
+    from specmind_eval.offline.join import join_suite
+    from specmind_eval.offline.suite import evaluate_suite
     config, output, _ = setup
     run(config, output)
     before = {str(p): p.read_bytes() for p in output.rglob('*') if p.is_file()}
     def no_execution(**kwargs):
         pytest.fail('Debug cache hit should not run pytest')
     with monkeypatch.context() as patch:
-        patch.setattr('paper_eval_v2.evaluation.run_pytest_postcondition', no_execution)
+        patch.setattr('specmind_eval.evaluate.evaluator.run_pytest_postcondition', no_execution)
         result = replay(output, 'target.f', output.parent/'debug', attempt=1, mutant='1')
         assert result['correctness'] == 'pass'
         assert result['mutation']['assertion']['killed'] == 1
@@ -216,16 +216,16 @@ def test_no_mutant_skips_llm(setup):
 
 
 def test_prepared_main_never_filters_or_exports(setup, monkeypatch):
-    from paper_eval_v2.dataset import load
-    from paper_eval_v2.evaluation import Evaluator
+    from specmind_eval.inputs.dataset import load
+    from specmind_eval.evaluate.evaluator import Evaluator
     config, output, problem = setup
     problems, tests = load(Path(config['problems']), Path(config['tests']))
     mutant={'id':'prepared-1','function_source':'def f(): return 2\n'}
     config.update(prepared_dataset='prepared',prepared_mutants='corpus')
-    monkeypatch.setattr('paper_eval_v2.runner.load_prepared_dataset', lambda *a: (problems,tests,{'fingerprint':'dataset'}))
-    monkeypatch.setattr('paper_eval_v2.runner.load_prepared_mutants', lambda *a: ({'target.f':{'done':True,'mutants':[mutant]}},{'fingerprint':'corpus'}))
+    monkeypatch.setattr('specmind_eval.run.load_prepared_dataset', lambda *a: (problems,tests,{'fingerprint':'dataset'}))
+    monkeypatch.setattr('specmind_eval.run.load_prepared_mutants', lambda *a: ({'target.f':{'done':True,'mutants':[mutant]}},{'fingerprint':'corpus'}))
     monkeypatch.setattr(Evaluator,'preflight',lambda *a: pytest.fail('Main reran dataset filtering'))
-    monkeypatch.setattr('paper_eval_v2.runner.prepare',lambda *a: pytest.fail('Main exported mutants'))
+    monkeypatch.setattr('specmind_eval.run.prepare',lambda *a: pytest.fail('Main exported mutants'))
     summary=run(config,output)
     assert summary['generated']==1
     result=read(output/'results.json')[0]

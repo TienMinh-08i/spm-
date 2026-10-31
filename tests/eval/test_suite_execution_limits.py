@@ -1,7 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from paper_eval_v2.execution import run_pytest_postcondition, _case_evidence
+from specmind_eval.evaluate.pytest_runner import run_pytest_postcondition, _case_evidence
 
 
 def run(repo, tests, source, mutant, **options):
@@ -51,7 +51,7 @@ def test_invalid_selector_retries_are_bounded(tmp_path, monkeypatch):
     def fake(*a,**kw):
         calls.append(kw['timeout'])
         return SimpleNamespace(stdout='ERROR: not found: test name',returncode=4)
-    monkeypatch.setattr('paper_eval_v2.execution.subprocess.run',fake)
+    monkeypatch.setattr('specmind_eval.evaluate.pytest_runner.subprocess.run',fake)
     status,detail=run(tmp_path,[('test_bad.py',f'test_{i}') for i in range(100)],'def f(): pass','def f(): pass',max_processes=3)
     assert status=='budget_exhausted' and len(calls)==3
     assert detail['process_count']==3
@@ -59,7 +59,7 @@ def test_invalid_selector_retries_are_bounded(tmp_path, monkeypatch):
 
 def test_total_budget_applies_across_processes(tmp_path, monkeypatch):
     ticks=iter([0,0,5])
-    monkeypatch.setattr('paper_eval_v2.execution.monotonic',lambda:next(ticks))
-    monkeypatch.setattr('paper_eval_v2.execution.subprocess.run',lambda *a,**kw:SimpleNamespace(stdout='ERROR: not found:',returncode=4))
+    monkeypatch.setattr('specmind_eval.evaluate.pytest_runner.monotonic',lambda:next(ticks))
+    monkeypatch.setattr('specmind_eval.evaluate.pytest_runner.subprocess.run',lambda *a,**kw:SimpleNamespace(stdout='ERROR: not found:',returncode=4))
     status,detail=run(tmp_path,[('test_bad.py','a'),('test_bad.py','b')],'def f(): pass','def f(): pass',total_timeout=4)
     assert status=='budget_exhausted' and detail['process_count']==1

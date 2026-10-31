@@ -5,4 +5,4 @@ COPY . /opt/evaluator
 RUN pip install --no-cache-dir -r paper_eval_v2/requirements.lock && pip install --no-cache-dir --no-deps .
 ENV PYTHONUNBUFFERED=1 PYTHONUTF8=1 PYTHONIOENCODING=utf-8
 WORKDIR /workspace
-ENTRYPOINT ["python", "-m", "paper_eval_v2"]
+ENTRYPOINT ["python", "-m", "specmind_eval"]
