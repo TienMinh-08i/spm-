@@ -8,7 +8,8 @@ from time import perf_counter
 
 from .dataset import DatasetSpec
 from .mutmut import export_mutmut_function_mutants
-from .storage import digest, read, write
+from paper_eval_v2.common.fingerprint import digest
+from paper_eval_v2.common.storage import read, write
 
 
 def executable_ast(source):

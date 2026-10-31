@@ -1,48 +1,21 @@
 """Offline dataset preparation, checkpoints and read-only artifact validation."""
-import hashlib
 from pathlib import Path
 from time import perf_counter
 
-from .dataset import load, function_code, pytest_nodeid, repo_path_for_problem, read_jsonl
+from .dataset import load, function_code, pytest_nodeid, repo_path_for_problem
+from paper_eval_v2.common.jsonl import read_jsonl
 from .dataset_filter import filter_tests
-from .debug import separate_output
+from paper_eval_v2.common.outputs import separate_output
 from .evaluation import Evaluator
 from .prepare_tests import prepare_tests
-from .provenance import runtime_identity
-from .storage import digest, read, write, run_lock
+from paper_eval_v2.common.fingerprint import digest
+from paper_eval_v2.common.storage import read, write, run_lock
 
 SCHEMA = 'prepared-dataset-v1'
 
 
-def source_environment(repo):
-    identity = runtime_identity(repo)
-    identity.pop('engine')
-    identity['packages'] = [list(package) for package in identity['packages']]
-    return identity
-
-
-def file_hash(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
-
-
-def write_jsonl(path, rows):
-    # Atomic JSON write + JSONL export; manifest is published last.
-    import json
-    import os
-    import tempfile
-    path = Path(path)
-    fd, name = tempfile.mkstemp(dir=path.parent, prefix=path.name, suffix='.tmp')
-    try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as stream:
-            for row in rows:
-                stream.write(json.dumps(row, ensure_ascii=False)+'\n')
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(name, path)
-    finally:
-        if Path(name).exists():
-            Path(name).unlink()
-
+from .common.fingerprint import file_hash, source_environment
+from .common.jsonl import write_jsonl
 
 def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
                     timeout=120, batch_size=500, force=False):
@@ -59,9 +32,9 @@ def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
     if not candidates:
         raise ValueError('No functions to prepare')
     env = source_environment(repo)
-    implementation = {n: file_hash(Path(__file__).with_name(n)) for n in
+    implementation = {n: file_hash(Path(__file__).parent / n) for n in
                       ('prepare_dataset.py', 'prepare_tests.py', 'dataset_filter.py', 'pytest_plugin.py',
-                       'execution.py', 'dataset.py', 'evaluation.py', 'provenance.py', 'storage.py')}
+                       'execution.py', 'dataset.py', 'evaluation.py', 'common/fingerprint.py', 'common/storage.py', 'common/jsonl.py', 'common/outputs.py')}
     fingerprint = digest({'problems': file_hash(problems), 'tests': file_hash(tests),
                           'candidates': candidates, 'environment': env, 'implementation': implementation,
                           'timeout': timeout, 'batch_size': batch_size})

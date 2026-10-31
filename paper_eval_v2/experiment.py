@@ -5,14 +5,16 @@ import csv
 
 from .metrics import mutation_metrics
 from .report import token_usage
-from .storage import digest, read, write, run_lock
+from paper_eval_v2.common.fingerprint import digest
+from paper_eval_v2.common.storage import read, write, run_lock
 
 ARMS = {"A": "none", "B": "callee", "C": "caller", "D": "callgraph"}
 
 
 def experiment(config, output, resume=False):
     from .runner import run
-    from .context import CallGraph, verify_commit
+    from .context import CallGraph
+    from paper_eval_v2.common.git import verify_commit
 
     output = Path(output)
     if not config.get("call_graph_dir"):

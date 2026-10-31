@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from .report import report
-from .storage import read
+from paper_eval_v2.common.storage import read
 
 DEFAULTS = {
     "dataset": "marshmallow",

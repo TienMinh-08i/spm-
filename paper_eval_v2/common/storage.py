@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import tempfile
@@ -47,10 +46,6 @@ def run_lock(output):
             release()
 
 
-def digest(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-
-
 def read(path, default=None):
     path = Path(path)
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else default
@@ -70,19 +65,3 @@ def write(path, value):
     finally:
         if os.path.exists(name):
             os.unlink(name)
-
-
-def tree_digest(root):
-    """Hash Python/config inputs including uncommitted edits, excluding outputs."""
-    root = Path(root)
-    ignored = {".git", ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache", "build", "dist"}
-    files = []
-    for directory, dirs, names in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in ignored)
-        for name in sorted(names):
-            path = Path(directory) / name
-            if path.suffix in {".py", ".toml", ".ini", ".cfg", ".txt", ".json", ".yaml", ".yml"}:
-                files.append(
-                    (path.relative_to(root).as_posix(), hashlib.sha256(path.read_bytes()).hexdigest())
-                )
-    return digest(files)

@@ -4,9 +4,10 @@ import subprocess
 from pathlib import Path
 
 from .mutation_scope import load_scope
-from .prepare_dataset import file_hash, source_environment
-from .storage import digest, read, write, run_lock
-from .debug import separate_output
+from paper_eval_v2.common.fingerprint import file_hash, source_environment
+from paper_eval_v2.common.fingerprint import digest
+from paper_eval_v2.common.storage import read, write, run_lock
+from paper_eval_v2.common.outputs import separate_output
 
 
 def prepare_mutants(scope,repo,output,*,resume=False,image='specmind-paper-eval-mutmut-py312:latest',timeout=1800):
@@ -16,9 +17,9 @@ def prepare_mutants(scope,repo,output,*,resume=False,image='specmind-paper-eval-
     rows,targets,scope_manifest=load_scope(scope,repo)
     inspected=subprocess.run(['docker','image','inspect',image,'--format','{{.Id}}'],capture_output=True,text=True,check=True)
     image_id=inspected.stdout.strip()
-    implementation={name:file_hash(Path(__file__).with_name(name)) for name in
+    implementation={name:file_hash(Path(__file__).parent / name) for name in
                     ('prepare_mutants.py','mutant_worker.py','mutmut.py','mutation_runtime.py',
-                     'source.py','dataset.py','execution.py','storage.py','prepare_dataset.py','provenance.py')}
+                     'source.py','dataset.py','execution.py','common/storage.py','prepare_dataset.py','common/fingerprint.py')}
     fingerprint=digest({'scope':scope_manifest['fingerprint'],'scope_files':scope_manifest['files'],
                         'implementation':implementation,'image':image_id,'timeout':timeout})
     with run_lock(output):

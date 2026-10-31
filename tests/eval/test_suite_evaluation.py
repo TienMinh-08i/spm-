@@ -3,7 +3,7 @@ import json
 import pytest
 
 from paper_eval_v2.evaluation import Evaluator
-from paper_eval_v2.storage import read, write
+from paper_eval_v2.common.storage import read, write
 from paper_eval_v2.suite_evaluation import evaluate_suite
 
 

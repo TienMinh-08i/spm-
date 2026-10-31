@@ -6,7 +6,7 @@ import pytest
 from paper_eval_v2.__main__ import DEFAULTS
 from paper_eval_v2.mutants import prepare
 from paper_eval_v2.runner import run
-from paper_eval_v2.storage import read, write
+from paper_eval_v2.common.storage import read, write
 
 
 def attach_graph(config, root):

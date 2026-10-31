@@ -14,8 +14,8 @@ def path(value):
 
 
 def check_raw(directory):
-    from ..storage import read
-    from ..prepare_dataset import file_hash
+    from paper_eval_v2.common.storage import read
+    from paper_eval_v2.common.fingerprint import file_hash
 
     directory = path(directory)
     m = read(directory / "manifest.json")
@@ -99,7 +99,7 @@ def main(argv=None):
     allp.add_argument("--through", choices=["dataset", "scope", "mutants"], default="dataset")
     args = parser.parse_args(argv)
     try:
-        from ..storage import read
+        from paper_eval_v2.common.storage import read
 
         if args.command == "doctor":
             import importlib.metadata
@@ -142,7 +142,8 @@ def main(argv=None):
                 resume=args.resume,
             )
         elif args.command in {"dataset", "prepare"}:
-            from ..prepare_dataset import prepare_dataset, source_environment
+            from ..prepare_dataset import prepare_dataset
+            from paper_eval_v2.common.fingerprint import source_environment
 
             m = check_raw(args.raw)
             if path(m["repo"]) != args.repo:
@@ -173,7 +174,8 @@ def main(argv=None):
                 args.scope, args.repo, args.output, timeout=args.timeout, image=args.image, resume=args.resume
             )
         elif args.command == "validate":
-            from ..prepare_dataset import load_prepared_dataset, source_environment
+            from ..prepare_dataset import load_prepared_dataset
+            from paper_eval_v2.common.fingerprint import source_environment
 
             result = {}
             manifest = None
@@ -210,7 +212,7 @@ def main(argv=None):
         else:
             from .extract import extract
             from ..prepare_dataset import prepare_dataset
-            from ..storage import run_lock, write
+            from paper_eval_v2.common.storage import run_lock, write
 
             cfg = read(args.config)
             base = args.config.parent
@@ -239,7 +241,7 @@ def main(argv=None):
 
             repo = resolve("repo")
             out = resolve("output")
-            from ..debug import separate_output
+            from paper_eval_v2.common.outputs import separate_output
 
             separate_output(out, repo)
             with run_lock(out):

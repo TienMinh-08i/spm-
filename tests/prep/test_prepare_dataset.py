@@ -2,7 +2,7 @@ import json
 import pytest
 
 from paper_eval_v2.prepare_dataset import prepare_dataset, load_prepared_dataset
-from paper_eval_v2.storage import read
+from paper_eval_v2.common.storage import read
 
 
 @pytest.fixture

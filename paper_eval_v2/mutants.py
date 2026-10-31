@@ -10,7 +10,8 @@ from types import SimpleNamespace
 from .dataset import DatasetSpec, function_code
 from .mutmut import export_mutmut_function_mutants, load_exported_mutants
 from .source import source_match
-from .storage import digest, read, write
+from paper_eval_v2.common.fingerprint import digest
+from paper_eval_v2.common.storage import read, write
 
 
 def export_bundle_digest(config):

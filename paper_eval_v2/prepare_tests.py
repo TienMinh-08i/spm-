@@ -4,10 +4,12 @@ import json
 from pathlib import Path
 import subprocess
 import sys
-from .dataset import read_jsonl, pytest_nodeid
-from .debug import separate_output
+from paper_eval_v2.common.jsonl import read_jsonl
+from .dataset import pytest_nodeid
+from paper_eval_v2.common.outputs import separate_output
 from .execution import pythonpath_for
-from .storage import digest, write
+from paper_eval_v2.common.fingerprint import digest
+from paper_eval_v2.common.storage import write
 
 
 def prepare_tests(tests, repo, output):

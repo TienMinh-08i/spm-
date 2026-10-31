@@ -8,15 +8,17 @@ from pathlib import Path
 from time import perf_counter
 
 from .dataset import function_code, load, pytest_nodeid, repo_path_for_problem
-from .context import CallGraph, build_context_pack, verify_commit
+from .context import CallGraph, build_context_pack
+from paper_eval_v2.common.git import verify_commit
 from .evaluation import Evaluator
 from .mutants import export_bundle_digest, prepare
 from .prepare_dataset import load_prepared_dataset
 from .prepare_mutants import load_prepared_mutants
 from .report import report
 from .specmind import generate
-from .storage import digest, read, run_lock, tree_digest, write
-from .provenance import evaluation_identity
+from paper_eval_v2.common.fingerprint import digest, tree_digest
+from paper_eval_v2.common.storage import read, run_lock, write
+from paper_eval_v2.common.fingerprint import evaluation_identity
 
 
 def run(config, output, resume=False):

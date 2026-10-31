@@ -7,7 +7,6 @@ import ast
 import textwrap
 import hashlib
 import json
-import subprocess
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -15,12 +14,7 @@ from typing import Any
 MODES = ("none", "callee", "caller", "callgraph")
 
 
-def verify_commit(repo: Path, expected: str | None):
-    if expected:
-        actual = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
-        if actual != expected:
-            raise ValueError(f"Checkout commit mismatch: expected {expected}, got {actual}")
-
+from .common.git import verify_commit
 
 def source_hash_matches(raw: bytes, expected: str) -> bool:
     # Manifest was produced on Windows. Accept only newline normalization.

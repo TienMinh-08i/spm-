@@ -1,9 +1,10 @@
 """Pair assertion/suite evidence with identity checks, without executing tests."""
 from pathlib import Path
-from .debug import separate_output
+from paper_eval_v2.common.outputs import separate_output
 from .metrics import mutation_metrics
 from .report import report
-from .storage import digest, read, write, run_lock
+from paper_eval_v2.common.fingerprint import digest
+from paper_eval_v2.common.storage import read, write, run_lock
 
 
 def join_suite(run, suite, output):

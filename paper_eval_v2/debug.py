@@ -1,20 +1,17 @@
 """Narrow, offline debug entry points. Never imports or calls the LLM client."""
 from pathlib import Path
 from .candidate import evaluate
-from .dataset import function_code, pytest_nodeid, read_jsonl
+from .dataset import function_code, pytest_nodeid
+from paper_eval_v2.common.jsonl import read_jsonl
 from .evaluation import Evaluator
 from .metrics import mutation_metrics
-from .storage import digest, read, write, run_lock
+from paper_eval_v2.common.fingerprint import digest
+from paper_eval_v2.common.storage import read, write, run_lock
 
 
-def separate_output(output, *sources):
-    output = Path(output).resolve()
-    for source in sources:
-        source = Path(source).resolve()
-        if output == source or output in source.parents or source in output.parents:
-            raise ValueError('Output must be separate from source run, suite and checkout')
-    return output
 
+
+from .common.outputs import separate_output
 
 def nodeids(tests, output):
     rows = [{'test_id': r.get('test_id'), 'nodeid': pytest_nodeid(r)} for r in read_jsonl(Path(tests))]

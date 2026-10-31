@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 
 from .context import CallGraph, canonical_id, source_hash_matches
-from .storage import write
+from paper_eval_v2.common.storage import write
 
 
 def prepare_context_assets(graph_dir, usage_zip, repo, output):

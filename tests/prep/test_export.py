@@ -1,7 +1,7 @@
 import pytest
 
 from paper_eval_v2.mutmut import parse_mutmut_result_ids, remove_workspace
-from paper_eval_v2.storage import run_lock
+from paper_eval_v2.common.storage import run_lock
 
 
 def test_result_ids_parser_accepts_ranges_and_ignores_headings():

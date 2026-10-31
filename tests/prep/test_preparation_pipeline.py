@@ -7,7 +7,7 @@ import pytest
 from paper_eval_v2.preparation.extract import extract
 from paper_eval_v2.prepare_dataset import prepare_dataset, load_prepared_dataset
 from paper_eval_v2.mutation_scope import prepare_scope, body_line_count
-from paper_eval_v2.storage import read
+from paper_eval_v2.common.storage import read
 from paper_eval_v2.preparation.cli import main
 
 
@@ -203,7 +203,8 @@ def test_explicit_exclusion_requires_reason(prepared, tmp_path):
 
 def test_docker_mounts_external_repo_and_maps_callee(tmp_path, monkeypatch):
     import paper_eval_v2.prepare_mutants as module
-    from paper_eval_v2.storage import digest, write
+    from paper_eval_v2.common.fingerprint import digest
+    from paper_eval_v2.common.storage import write
 
     repo = tmp_path / "external checkout"
     repo.mkdir()
@@ -269,11 +270,7 @@ def test_docker_mounts_external_repo_and_maps_callee(tmp_path, monkeypatch):
 
 
 def test_documented_filter_is_optional(prepared, tmp_path):
-    from paper_eval_v2.preparation.documentation import (
-        collect_problems,
-        collect_documented_symbols,
-        _problem_is_documented,
-    )
+    from paper_eval_v2.preparation.documentation import collect_problems, collect_documented_symbols, _problem_is_documented
     import shutil
 
     repo = tmp_path / "checkout"

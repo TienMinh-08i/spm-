@@ -2,7 +2,7 @@
 
 import csv
 
-from .storage import read, write
+from paper_eval_v2.common.storage import read, write
 
 
 def token_usage(state):
@@ -170,7 +170,7 @@ def report(output):
             m = (record.get("mutation") or {}).get("metrics", {})
             row = {k: record.get(k) for k in ["function", "status", "assertion", "attempts"]}
             row["correctness"] = record.get("correctness", {}).get("status")
-            from .storage import digest
+            from paper_eval_v2.common.fingerprint import digest
 
             state = read(output / "functions" / digest(record["function"])[:16] / "generation.json", {})
             row.update(token_usage(state))

@@ -101,7 +101,7 @@ def test_empty_context_has_same_prompt_as_baseline(tmp_path):
 
 def test_runtime_usage_changes_graph_identity(tmp_path):
     import hashlib
-    from paper_eval_v2.storage import write
+    from paper_eval_v2.common.storage import write
     write(tmp_path/'nodes.json', [{'id': 'm.f', 'source': 'def f(): pass'}])
     write(tmp_path/'edges.json', [])
     usage = [{'function_id': 'm.f', 'nodeid': 'tests/t.py::test_x', 'file': 'tests/t.py',

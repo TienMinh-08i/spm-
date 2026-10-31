@@ -8,8 +8,9 @@ import ast
 
 from .execution import _case_evidence, run_pytest_postcondition
 from .metrics import mutation_metrics
-from .storage import digest, read, write
-from .provenance import evaluation_identity
+from paper_eval_v2.common.fingerprint import digest
+from paper_eval_v2.common.storage import read, write
+from paper_eval_v2.common.fingerprint import evaluation_identity
 
 
 class Evaluator:

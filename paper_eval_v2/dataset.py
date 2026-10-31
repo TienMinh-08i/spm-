@@ -1,11 +1,12 @@
 from __future__ import annotations
 import ast
-import json
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+
+from .common.jsonl import read_jsonl
 
 @dataclass(frozen=True)
 class DatasetSpec:
@@ -16,13 +17,6 @@ class DatasetSpec:
     tests_file: str
     curated_file: str | None = None
     default_repo_root: Path | None = None
-
-
-def read_jsonl(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    with path.open("r", encoding="utf-8") as handle:
-        return [json.loads(line) for line in handle if line.strip()]
 
 
 def load_dataset(spec: DatasetSpec) -> tuple[list[dict[str, Any]], dict[str, list[dict[str, Any]]]]:
