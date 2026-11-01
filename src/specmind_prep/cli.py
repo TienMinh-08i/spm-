@@ -137,7 +137,11 @@ def main(argv=None):
         elif args.command == "extract":
             from specmind_prep.extract.extract import extract
 
+            if args.exclude_config and not args.exclude_config.is_file():
+                raise ValueError("Exclusion config file not found: " + str(args.exclude_config))
             excluded = read(args.exclude_config) if args.exclude_config else []
+            if not isinstance(excluded, list):
+                raise ValueError("Exclusion config must contain a JSON list")
             result = extract(
                 args.repo,
                 args.output,

@@ -32,3 +32,11 @@ def test_raw_extraction_rejects_pytest_early_stop(tmp_path):
  assert not json.loads((output/"manifest.json").read_text())["complete"]
  trace=json.loads((output/"trace.json").read_text())
  assert len(trace["nodeids"])==2 and len(trace["reports"])==1
+
+def test_missing_exclusion_config_does_not_start_extraction(tmp_path,monkeypatch,capsys):
+ from specmind_prep.cli import main
+ import specmind_prep.extract.extract as module
+ monkeypatch.setattr(module,"extract",lambda *a,**kw:pytest.fail("Extraction started"))
+ assert main(["extract","--repo",str(tmp_path),"--output",str(tmp_path/"out"),"--exclude-config",str(tmp_path/"missing.json")])==1
+ captured=capsys.readouterr()
+ assert "Exclusion config file not found" in captured.err+captured.out
