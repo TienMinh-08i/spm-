@@ -59,6 +59,7 @@ class Evaluator:
             mutant_source=mutant_source,
             mutation_problem=mutation_problem,
             repo_root=self.repo_root,
+            python_path=self.config.get("python_path", self.problem.get("_python_path")),
             timeout=self.config["pytest_timeout"] or None,
             batch_size=self.config["batch_size"],
             max_command_chars=24000,

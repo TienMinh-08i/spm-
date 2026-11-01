@@ -60,7 +60,8 @@ def prepare_scope(dataset, repo, output, *, resume=False, timeout=300):
     dataset, repo = Path(dataset).resolve(), Path(repo).resolve()
     output = separate_output(output, dataset, repo)
     problems, tests, manifest = load_prepared_dataset(dataset, repo)
-    index, locations = source_index(repo)
+    project = manifest.get("project")
+    index, locations = source_index(repo, project)
     short = {p['problem_id'] for p in problems if body_line_count(function_code(p)) < 5}
     fingerprint = digest({'dataset': manifest['fingerprint'], 'files': manifest['files'],
                           'environment': source_environment(repo), 'code': digest({'scope': file_hash(__file__), 'plugin': file_hash(TRACE_PLUGIN_PATH),
@@ -72,7 +73,7 @@ def prepare_scope(dataset, repo, output, *, resume=False, timeout=300):
         if previous and previous['fingerprint'] != fingerprint:
             raise ValueError('Scope fingerprint mismatch')
         write(output/'manifest.json', {'schema': 'mutation-scope-v1', 'fingerprint': fingerprint, 'complete': False,
-                                      'dataset': str(dataset), 'dataset_fingerprint': manifest['fingerprint'],
+                                      'project': project, 'dataset': str(dataset), 'dataset_fingerprint': manifest['fingerprint'],
                                       'dataset_files': manifest['files'], 'source_environment': source_environment(repo)})
         config = {'locations': [[p,line,key] for (p,line),key in locations.items()], 'short': sorted(short),
                   'allowed': {k:[pytest_nodeid(t) for t in v] for k,v in tests.items()}}
@@ -87,7 +88,7 @@ def prepare_scope(dataset, repo, output, *, resume=False, timeout=300):
             if saved and saved['status']=='pass':
                 evidence.append(saved['trace'])
                 continue
-            env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(output), pythonpath_for(repo)]),
+            env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(output), pythonpath_for(repo, project.get("python_path") if project else None)]),
                        PYTHONUTF8='1', SPECMIND_SCOPE_CONFIG=str(output/'trace_config.json'),
                        SPECMIND_SCOPE_RESULT=str(output/'trace'/f'{i:03d}.events.json'))
             env.pop('PYTEST_ADDOPTS',None)

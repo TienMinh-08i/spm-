@@ -4,5 +4,7 @@ WORKDIR /opt/evaluator
 COPY . /opt/evaluator
 RUN pip install --no-cache-dir -r requirements.lock && pip install --no-cache-dir --no-deps .
 ENV PYTHONUNBUFFERED=1 PYTHONUTF8=1 PYTHONIOENCODING=utf-8
+ARG PROJECT_DEPENDENCIES=[]
+RUN python -c "import json,os,subprocess,sys; deps=json.loads(os.environ['PROJECT_DEPENDENCIES']); subprocess.check_call([sys.executable,'-m','pip','install',*deps]) if deps else None"
 WORKDIR /workspace
 ENTRYPOINT ["python", "-m", "specmind_eval"]

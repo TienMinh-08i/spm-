@@ -10,11 +10,12 @@ from specmind_eval.common.storage import read, write, run_lock
 from specmind_eval.common.outputs import separate_output
 
 
-def prepare_mutants(scope,repo,output,*,resume=False,image='specmind-paper-eval-mutmut-py312:latest',timeout=1800):
+def prepare_mutants(scope,repo,output,*,resume=False,image=None,timeout=1800):
     scope,repo=Path(scope).resolve(),Path(repo).resolve()
     workspace=Path(__file__).resolve().parents[2]
     output=separate_output(output,scope,repo)
     rows,targets,scope_manifest=load_scope(scope,repo)
+    image = image or "specmind-" + (scope_manifest.get("project") or {"name": "project"})["name"] + "-mutmut:latest"
     inspected=subprocess.run(['docker','image','inspect',image,'--format','{{.Id}}'],capture_output=True,text=True,check=True,timeout=30)
     image_id=inspected.stdout.strip()
     implementation={name:file_hash(Path(__file__).resolve().parents[2] / name) for name in
@@ -31,9 +32,10 @@ def prepare_mutants(scope,repo,output,*,resume=False,image='specmind-paper-eval-
         manifest={'schema':'prepared-mutants-v1','fingerprint':fingerprint,'complete':False,
                   'scope_fingerprint':scope_manifest['fingerprint'],'scope_files':scope_manifest['files'],
                   'dataset_fingerprint':scope_manifest['dataset_fingerprint'],'dataset_files':scope_manifest['dataset_files'],
-                  'source_environment':source_environment(repo),'image_id':image_id,'image':image,
+                  'project':scope_manifest.get('project'), 'source_environment':source_environment(repo),'image_id':image_id,'image':image,
                   'implementation':implementation,'files':{},'timeout':timeout}
         write(output/'manifest.json',manifest)
+        targets = [dict(target, _project=scope_manifest.get('project')) for target in targets]
         write(output/'targets_input.json',targets)
         command=['docker','run','--rm','--mount',f'type=bind,source={workspace.as_posix()},target=/workspace,readonly',
                  '--mount',f'type=bind,source={output.as_posix()},target=/artifacts',

@@ -48,12 +48,53 @@ def runtime_identity(repo):
 
 def evaluation_identity(repo, config):
     return digest({**runtime_identity(repo),
-                   'pytest_timeout': config['pytest_timeout'], 'batch_size': config['batch_size']})
+                   'pytest_timeout': config['pytest_timeout'], 'batch_size': config['batch_size'],
+                   'python_path': config.get('python_path')})
 
 
 
 def engine_digest():
-    """Hash the complete engine packages, never the surrounding site-packages."""
+    """Hash explicit evaluation entry points and their local dependency closure."""
+    return implementation_digest('specmind_eval.run', 'specmind_eval.experiment',
+                                 'specmind_eval.offline.replay', 'specmind_eval.offline.suite',
+                                 'specmind_eval.offline.join',
+                                 'specmind_eval.evaluate.injected.postcondition_plugin',
+                                 'specmind_eval.evaluate.injected.mutation_runtime')
+
+
+def implementation_files(*entrypoints):
+    """Hash the local import closure of explicit entry modules; exclude tests/builds."""
+    import ast
+    import importlib.util
     root = Path(__file__).resolve().parents[2]
-    return digest({name: tree_digest(root / name) for name in
-                   ("specmind_eval", "specmind_prep", "paper_eval_v2")})
+    pending = list(entrypoints)
+    seen = set()
+    files = {}
+    while pending:
+        module = pending.pop()
+        if module in seen or not module.startswith(('specmind_eval', 'specmind_prep')):
+            continue
+        seen.add(module)
+        path = root.joinpath(*module.split('.')).with_suffix('.py')
+        if not path.is_file():
+            path = root.joinpath(*module.split('.'), '__init__.py')
+        if not path.is_file():
+            continue
+        files[path.relative_to(root).as_posix()] = file_hash(path)
+        package = module if path.name == '__init__.py' else module.rsplit('.',1)[0]
+        for node in ast.walk(ast.parse(path.read_text(encoding='utf8'))):
+            if isinstance(node, ast.Import):
+                pending.extend(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom):
+                name = importlib.util.resolve_name('.' * node.level + (node.module or ''), package) if node.level else node.module
+                if name:
+                    pending.append(name)
+                    pending.extend(name + '.' + alias.name for alias in node.names)
+        if module == 'specmind_eval.generate.loop':
+            for prompt in path.with_name('prompts').glob('*.txt'):
+                files[prompt.relative_to(root).as_posix()] = file_hash(prompt)
+    return dict(sorted(files.items()))
+
+
+def implementation_digest(*entrypoints):
+    return digest(implementation_files(*entrypoints))
