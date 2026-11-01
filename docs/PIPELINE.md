@@ -5,13 +5,13 @@ Thực hiện các lệnh từ root repo, trong môi trường Python đã cài 
 ## 1. Raw: hàm và liên kết test
 
 ```powershell
-python -m paper_eval_v2 prepare extract --repo checkouts/marshmallow --output artifacts/manual/raw
+python -m specmind_prep extract --repo checkouts/marshmallow --output artifacts/manual/raw
 ```
 
 Chỉ quan sát một hàm và một file test:
 
 ```powershell
-python -m paper_eval_v2 prepare extract --repo checkouts/marshmallow --output artifacts/pilot/raw --task marshmallow.class_registry.get_class --test tests/test_registry.py
+python -m specmind_prep extract --repo checkouts/marshmallow --output artifacts/pilot/raw --task marshmallow.class_registry.get_class --test tests/test_registry.py
 ```
 
 `--task` và `--test` có thể lặp. `--documented-only` bật lọc symbol được tài liệu RST liệt kê. `--expected-commit SHA` kiểm tra commit; `--timeout 1800` giới hạn lượt trace. Không thêm `--task` thì lấy mọi hàm ứng viên có docstring.
@@ -33,7 +33,7 @@ Liên kết chỉ được ghi trong call phase, không lấy các lời gọi c
 ## 2. Lọc test tới assertion
 
 ```powershell
-python -m paper_eval_v2 prepare dataset --raw artifacts/manual/raw --repo checkouts/marshmallow --output artifacts/manual/prepared --timeout 120 --batch-size 500
+python -m specmind_prep dataset --raw artifacts/manual/raw --repo checkouts/marshmallow --output artifacts/manual/prepared --timeout 120 --batch-size 500
 ```
 
 Với mỗi hàm, giữ test pass khi chèn `assert True`, rồi fail có bằng chứng tại assertion khi thay bằng `assert False`. Exception trước return, lỗi collection/setup hoặc test nuốt AssertionError không được coi là đạt điều kiện.
@@ -49,7 +49,7 @@ Với mỗi hàm, giữ test pass khi chèn `assert True`, rồi fail có bằng
 ## 3. Chọn scope mutation
 
 ```powershell
-python -m paper_eval_v2 prepare scope --dataset artifacts/manual/prepared --repo checkouts/marshmallow --output artifacts/manual/scope --timeout 300
+python -m specmind_prep scope --dataset artifacts/manual/prepared --repo checkouts/marshmallow --output artifacts/manual/scope --timeout 300
 ```
 
 Đếm dòng thân hàm sau khi chuẩn hóa AST, bỏ docstring đầu; không đếm comment hay dòng trống. Hàm dưới 5 dòng được xét thêm callee nội bộ trực tiếp, không mở rộng đệ quy.
@@ -66,8 +66,8 @@ Docker cần hoạt động trước khi chạy:
 
 ```powershell
 docker info
-docker build -t specmind-paper-eval-mutmut-py312:latest -f Dockerfile.mutmut .
-python -m paper_eval_v2 prepare mutants --scope artifacts/manual/scope --repo checkouts/marshmallow --output artifacts/manual/mutants --timeout 1800
+docker build -t specmind-paper-eval-mutmut-py312:latest -f docker/mutmut-worker.Dockerfile .
+python -m specmind_prep mutants --scope artifacts/manual/scope --repo checkouts/marshmallow --output artifacts/manual/mutants --timeout 1800
 ```
 
 `--image` chọn image khác. `--timeout` dành cho mutmut. Package và checkout được mount chỉ đọc; output có mount ghi riêng. Một target dùng chung chỉ export một lần. Mỗi mutant thay đúng một target; assertion vẫn ở root.
@@ -86,9 +86,9 @@ Số mutant duy nhất và số cặp hàm–mutant có thể khác nhau vì cal
 ## 5. Validate và resume
 
 ```powershell
-python -m paper_eval_v2 prepare validate --repo checkouts/marshmallow --raw artifacts/manual/raw --dataset artifacts/manual/prepared --scope artifacts/manual/scope
-python -m paper_eval_v2 validate-mutants --repo-root checkouts/marshmallow --dataset artifacts/manual/prepared --mutants artifacts/manual/mutants
-python -m paper_eval_v2 prepare inspect --output artifacts/manual/prepared
+python -m specmind_prep validate --repo checkouts/marshmallow --raw artifacts/manual/raw --dataset artifacts/manual/prepared --scope artifacts/manual/scope
+python -m specmind_eval validate-mutants --repo-root checkouts/marshmallow --dataset artifacts/manual/prepared --mutants artifacts/manual/mutants
+python -m specmind_prep inspect --output artifacts/manual/prepared
 ```
 
 Lệnh validate đầu kiểm tra từng artifact; chưa xác nhận quan hệ dataset–scope khi bạn ghép thủ công. Dùng scope tạo từ chính dataset đó, cùng một thư mục pipeline. Manifest cần đầy đủ danh sách file; không tự sửa manifest. Runner từ chối corpus thiếu hoặc không khớp dataset.

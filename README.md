@@ -22,10 +22,10 @@ cd spm-
 python --version
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -r paper_eval_v2/requirements.lock
+python -m pip install -r requirements.lock
 python -m pip install --no-deps -e .
 python -m pip check
-python -m paper_eval_v2 --help
+python -m specmind_eval --help
 ```
 
 Trên Linux/macOS, kích hoạt bằng `source .venv/bin/activate`; các lệnh `python -m ...` giữ nguyên. Dependency lock được dùng với Python 3.11; các nền tảng khác cần được kiểm tra trong môi trường của bạn.
@@ -38,7 +38,7 @@ Nếu PowerShell không cho kích hoạt môi trường, thay `python` trong cá
 git clone https://github.com/marshmallow-code/marshmallow.git checkouts/marshmallow
 git -C checkouts/marshmallow checkout 60a803821466f3e537fa2729d65e1aaf7df9d2a4
 python -m pip install --no-deps -e ./checkouts/marshmallow
-python -m paper_eval_v2 prepare doctor --repo checkouts/marshmallow
+python -m specmind_prep doctor --repo checkouts/marshmallow
 ```
 
 Commit trên khớp config mẫu. Khi đổi commit, cập nhật `expected_commit` trong config chuẩn bị và dùng output mới. Hoàn tất cài đặt dependency trước khi chạy pipeline.
@@ -61,7 +61,7 @@ Nhớ đặt dấu phẩy giữa các trường JSON. Khi chuyển từ pilot sa
 ## 4. Tạo dataset
 
 ```powershell
-python -m paper_eval_v2 prepare all --config configs/preparation.local.json
+python -m specmind_prep all --config configs/preparation.local.json
 ```
 
 Lệnh này trích xuất hàm, quan sát test liên quan và lọc True/False; mặc định dừng sau dataset. Không gọi LLM hay Docker.
@@ -73,11 +73,11 @@ Với config mẫu, đọc `artifacts/marshmallow/prepared/summary.json`: `ready
 Scope xác định phần code được phép thay đổi. Hàm dưới 5 dòng thân hàm theo AST được mở rộng tới callee nội bộ trực tiếp — tức hàm được nó gọi. Assertion vẫn được kiểm tra tại hàm gốc.
 
 ```powershell
-python -m paper_eval_v2 prepare all --config configs/preparation.local.json --through scope --resume
+python -m specmind_prep all --config configs/preparation.local.json --through scope --resume
 docker info
-docker build -t specmind-paper-eval-mutmut-py312:latest -f Dockerfile.mutmut .
-python -m paper_eval_v2 prepare all --config configs/preparation.local.json --through mutants --resume
-python -m paper_eval_v2 validate-mutants --dataset artifacts/marshmallow/prepared --mutants artifacts/marshmallow/mutants --repo-root checkouts/marshmallow
+docker build -t specmind-paper-eval-mutmut-py312:latest -f docker/mutmut-worker.Dockerfile .
+python -m specmind_prep all --config configs/preparation.local.json --through mutants --resume
+python -m specmind_eval validate-mutants --dataset artifacts/marshmallow/prepared --mutants artifacts/marshmallow/mutants --repo-root checkouts/marshmallow
 ```
 
 `--resume` dùng lại bước đã hoàn thành khi đầu vào không đổi. Image trong config phải trùng tên image vừa build. Chi tiết các bước và file output: [Pipeline](docs/PIPELINE.md).
@@ -85,7 +85,7 @@ python -m paper_eval_v2 validate-mutants --dataset artifacts/marshmallow/prepare
 ## 6. Chạy thử không gọi API
 
 ```powershell
-python -m paper_eval_v2 run --config configs/offline.example.json --output runs/smoke
+python -m specmind_eval run --config configs/offline.example.json --output runs/smoke
 ```
 
 Config offline dùng assertion cố định để kiểm tra đường chạy; không đo chất lượng sinh assertion. Nó vẫn cần dataset và mutant đã chuẩn bị. Nếu đổi output ở bước chuẩn bị, sửa `prepared_dataset` và `prepared_mutants` trong config chạy cho khớp.
@@ -108,7 +108,7 @@ $env:OPENAI_API_KEY = [System.Net.NetworkCredential]::new('', $secureKey).Passwo
 Nếu dùng endpoint tương thích khác, đặt thêm `$env:OPENAI_BASE_URL = 'https://YOUR_ENDPOINT/v1'`. Công cụ cũng đọc `OPENROUTER_API_KEY` khi không có `OPENAI_API_KEY`. Công cụ không tự đọc file `.env`. Trên Bash có thể dùng `read -rs OPENAI_API_KEY; export OPENAI_API_KEY`.
 
 ```powershell
-python -m paper_eval_v2 run --config configs/run.local.json --output runs/experiment-01
+python -m specmind_eval run --config configs/run.local.json --output runs/experiment-01
 ```
 
 Lệnh này gọi API và có thể phát sinh phí. Luồng đánh giá đọc dữ liệu đã chuẩn bị; không lọc test hay tạo mutant trong vòng sinh assertion.
@@ -116,8 +116,8 @@ Lệnh này gọi API và có thể phát sinh phí. Luồng đánh giá đọc 
 ## 8. Đọc kết quả và tiếp tục
 
 ```powershell
-python -m paper_eval_v2 report --output runs/experiment-01
-python -m paper_eval_v2 run --config configs/run.local.json --output runs/experiment-01 --resume
+python -m specmind_eval report --output runs/experiment-01
+python -m specmind_eval run --config configs/run.local.json --output runs/experiment-01 --resume
 ```
 
 Đọc `report.md` trước; dùng `functions.csv`, `attempts.csv`, `mutants.csv` để xem chi tiết. Nếu thay source, config, code hoặc dependency, tạo output mới. [Kết quả và debug](docs/DEBUGGING.md) giải thích metric, file bằng chứng và replay một trường hợp.
@@ -130,5 +130,6 @@ python -m paper_eval_v2 run --config configs/run.local.json --output runs/experi
 | Chạy riêng từng bước tạo dữ liệu, hiểu output | [Pipeline](docs/PIPELINE.md) |
 | Đọc kết quả, replay, xử lý lỗi | [Kết quả và debug](docs/DEBUGGING.md) |
 | Kiểm tra cài đặt và test code | [Kiểm thử](docs/TESTING.md) |
+| Tìm module cần sửa và hiểu phụ thuộc | [Cấu trúc code](docs/ARCHITECTURE.md) |
 
-`checkouts/`, `artifacts/`, `runs/`, `.venv/` và `*.local.json` là dữ liệu/cấu hình trên máy bạn, được Git bỏ qua. Tên package trong lệnh là `paper_eval_v2`; `specmind-eval` là entry point tương đương sau khi cài đặt.
+`checkouts/`, `artifacts/`, `runs/`, `.venv/` và `*.local.json` là dữ liệu/cấu hình trên máy bạn, được Git bỏ qua. Sau khi cài đặt, dùng `specmind-eval` cho đánh giá và `specmind-prep` cho chuẩn bị. Hai lệnh tương đương là `python -m specmind_eval` và `python -m specmind_prep`. Lệnh `python -m paper_eval_v2` vẫn chuyển tiếp tới CLI đánh giá.
