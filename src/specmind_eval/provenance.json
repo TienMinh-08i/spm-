@@ -1,7 +1,7 @@
 {
   "source": "paper_eval local working tree, 2026-09-26",
   "preserved": [
-    "original SpecMind prompt strings and response parser",
+    "SpecMind response parser foundation",
     "dataset normalization and nodeid conversion",
     "pytest hook and isolated mutmut export foundation"
   ],
@@ -12,8 +12,8 @@
     "paper_eval\\vendor\\specmind_original\\generate_and_test_postconditions_general.py": "37c9c6796c33daef319e2350b5bba9b40063f0dab26fb16dd76c3f29d4327fb8"
   },
   "protocol_changes": [
-    "Fixed-exported lower/upper-bound assertion feedback",
-    "Only actual submissions can be selected",
+    "Confirmed assertion kills divided by all prepared mutants",
+    "Best correctness-passing candidate across exploration and submission",
     "Runtime source and path guard",
     "Original signature used for assertion input binding",
     "Suite-level set difference for additional kills"

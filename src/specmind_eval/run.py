@@ -132,7 +132,7 @@ def _run(config, output, resume=False):
                 "config": config,
                 "environment": environment,
                 "planned_functions": len(problems),
-                "protocol": "repository-adapted SpecMind; fixed-exported lower-bound mutation feedback",
+                "protocol": "repository-adapted SpecMind; confirmed assertion kills on prepared mutants",
                 "graph_sha256": graph.digest if graph else None,
             },
         )
