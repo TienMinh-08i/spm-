@@ -132,6 +132,7 @@ def main(argv=None):
                     ["docker", "info", "--format", "{{.ServerVersion}}"],
                     capture_output=True,
                     text=True,
+                    timeout=30,
                     check=True,
                 ).stdout.strip()
         elif args.command == "extract":

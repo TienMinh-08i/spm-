@@ -51,3 +51,16 @@ def test_validate_rejects_unrelated_dataset_scope(tmp_path,monkeypatch,capsys,fi
  assert main(["validate","--repo",str(tmp_path),"--dataset",str(tmp_path/"d"),"--scope",str(tmp_path/"s")])==1
  captured=capsys.readouterr()
  assert "does not belong to this dataset" in captured.err+captured.out
+
+def test_doctor_bounds_unresponsive_docker(tmp_path,monkeypatch,capsys):
+ import subprocess
+ import importlib.metadata
+ from specmind_prep.cli import main
+ monkeypatch.setattr(importlib.metadata,"version",lambda *a:"test")
+ def timeout(command,**kwargs):
+  assert kwargs["timeout"]==30
+  raise subprocess.TimeoutExpired(command,kwargs["timeout"])
+ monkeypatch.setattr(subprocess,"run",timeout)
+ assert main(["doctor","--docker"])==1
+ captured=capsys.readouterr()
+ assert "timed out" in captured.err+captured.out
