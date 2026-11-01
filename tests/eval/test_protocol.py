@@ -17,7 +17,7 @@ def test_union_and_new_kills_with_unknowns():
     assert metrics["paired_evaluated"] == 3
     assert metrics["combined"]["killed"] == 3
     assert metrics["new_assertion"]["ids"] == ["new"]
-    assert metrics["feedback"]["lower_bound"] == 3 / 4
+    assert metrics["feedback"]["score"] == 3 / 4
 
 
 def test_unknown_does_not_improve_feedback_or_become_survivor():
@@ -27,8 +27,8 @@ def test_unknown_does_not_improve_feedback_or_become_survivor():
             {"id": "2", "suite_killed": True, "assertion_killed": None},
         ]
     )
-    assert metrics["feedback"]["lower_bound"] == 0.5
-    assert metrics["feedback"]["upper_bound"] == 1
+    assert metrics["feedback"]["score"] == 0.5
+    assert metrics["feedback"]["not_killed"] == 0
     assert metrics["feedback"]["unknown"] == 1
     assert metrics["unresolved"] == 1
 
@@ -39,10 +39,10 @@ def test_assertion_only_metrics_do_not_infer_suite_survival():
         {"id": "survive", "suite_killed": None, "assertion_killed": False},
         {"id": "unknown", "suite_killed": None, "assertion_killed": None},
     ])
-    assert metrics["assertion"]["score"] == 0.5
+    assert metrics["assertion"]["score"] == 1 / 3
     assert metrics["assertion_evaluated"] == 2
     assert metrics["assertion_unresolved"] == 1
-    assert metrics["feedback"]["lower_bound"] == 1 / 3
+    assert metrics["feedback"]["score"] == 1 / 3
     assert metrics["paired_evaluated"] == 0
     for name in ("test_suite", "combined", "new_assertion"):
         assert metrics[name]["total"] == 0
@@ -92,7 +92,7 @@ def test_context_none_preserves_baseline_prompt(tmp_path, mode):
     )
 
 
-def test_only_submissions_selected_and_best_survives_later_failure(tmp_path):
+def test_exploration_is_selected_and_stops_at_threshold(tmp_path):
     answers = iter(
         [
             "<solution>assert return_value >= 0</solution>",
@@ -109,8 +109,8 @@ def test_only_submissions_selected_and_best_survives_later_failure(tmp_path):
     result = generate(
         "def f():\n    return 1", "f", FakeEvaluator(), [{}], config(), tmp_path / "state.json", call
     )
-    assert result["best"]["turn"] == 1
-    assert result["latest"]["correctness"]["status"] == "fail"
+    assert result["best"]["turn"] == 2
+    assert result["latest"]["correctness"]["status"] == "pass"
     assert result["done"]
 
 

@@ -132,7 +132,7 @@ def _run(config, output, resume=False):
                 "config": config,
                 "environment": environment,
                 "planned_functions": len(problems),
-                "protocol": "repository-adapted SpecMind; fixed-exported lower-bound mutation feedback",
+                "protocol": "repository-adapted SpecMind; confirmed assertion kills on prepared mutants",
                 "graph_sha256": graph.digest if graph else None,
             },
         )
@@ -219,7 +219,9 @@ def _run(config, output, resume=False):
                     attempts=len(state["attempts"]),
                     stop_reason=state.get("stop_reason"),
                     error=state.get("error"),
-                    selected_submission=selected is not None,
+                    selected_submission=selected is not None and selected["action"] == "submit",
+                    best_submission_turn=(state.get("best_submission") or {}).get("turn"),
+                    latest_turn=(state.get("latest") or {}).get("turn"),
                 )
                 # Preserve failed submissions for correctness reporting; never call an exploration a final submission.
                 if selected is None:

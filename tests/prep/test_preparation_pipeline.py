@@ -233,9 +233,11 @@ def test_docker_mounts_external_repo_and_maps_callee(tmp_path, monkeypatch):
         ),
     )
     monkeypatch.setattr(module, "source_environment", lambda *a: {"repo": "fixed"})
-    monkeypatch.setattr(
-        module.subprocess, "run", lambda *a, **k: type("Proc", (), {"stdout": "sha256:fixed"})()
-    )
+    def inspect_image(*args, **kwargs):
+        assert kwargs["timeout"] == 30
+        return type("Proc", (), {"stdout": "sha256:fixed"})()
+
+    monkeypatch.setattr(module.subprocess, "run", inspect_image)
     commands = []
 
     class Worker:

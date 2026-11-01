@@ -15,7 +15,7 @@ def prepare_mutants(scope,repo,output,*,resume=False,image='specmind-paper-eval-
     workspace=Path(__file__).resolve().parents[2]
     output=separate_output(output,scope,repo)
     rows,targets,scope_manifest=load_scope(scope,repo)
-    inspected=subprocess.run(['docker','image','inspect',image,'--format','{{.Id}}'],capture_output=True,text=True,check=True)
+    inspected=subprocess.run(['docker','image','inspect',image,'--format','{{.Id}}'],capture_output=True,text=True,check=True,timeout=30)
     image_id=inspected.stdout.strip()
     implementation={name:file_hash(Path(__file__).resolve().parents[2] / name) for name in
                     ('specmind_prep/mutants/corpus.py','specmind_prep/mutants/worker.py','specmind_prep/mutants/mutmut_export.py','specmind_eval/evaluate/injected/mutation_runtime.py',

@@ -13,6 +13,9 @@ def load_prepared_dataset(directory, repo):
     manifest = read(directory/'manifest.json')
     if not manifest or manifest.get('schema') != SCHEMA or not manifest.get('complete'):
         raise ValueError('Dataset preparation missing or incomplete')
+    required = {'excluded_functions.json', 'problems.jsonl', 'tests.jsonl', 'summary.json', 'results.json'}
+    if not isinstance(manifest.get("files"), dict) or not required.issubset(manifest["files"]):
+        raise ValueError("Manifest missing required artifact hashes")
     if source_environment(repo) != manifest['source_environment']:
         raise ValueError('Prepared dataset source/environment mismatch')
     for name, expected in manifest['files'].items():
@@ -34,6 +37,9 @@ def load_prepared_mutants(output,repo,dataset_manifest):
     manifest=read(output/'manifest.json')
     if not manifest or manifest.get('schema')!='prepared-mutants-v1' or not manifest.get('complete'):
         raise ValueError('Prepared mutants missing or incomplete')
+    required = {'summary.json', 'functions.json', 'targets_input.json'}
+    if not isinstance(manifest.get("files"), dict) or not required.issubset(manifest["files"]):
+        raise ValueError("Manifest missing required artifact hashes")
     if manifest['source_environment']!=source_environment(repo):
         raise ValueError('Prepared mutants source/environment mismatch')
     if manifest['dataset_fingerprint']!=dataset_manifest['fingerprint'] or manifest['dataset_files']!=dataset_manifest['files']:

@@ -21,6 +21,9 @@ def check_raw(directory):
     m = read(directory / "manifest.json")
     if not m or m.get("schema") != "raw-marshmallow-v1" or not m.get("complete"):
         raise ValueError("Raw dataset missing or incomplete")
+    required = {'command.json', 'problems.jsonl', 'tests.jsonl', 'summary.json', 'trace.json'}
+    if not isinstance(m.get("files"), dict) or not required.issubset(m["files"]):
+        raise ValueError("Manifest missing required artifact hashes")
     for name, h in m["files"].items():
         if Path(name).name != name or file_hash(directory / name) != h:
             raise ValueError("Raw artifact mismatch: " + name)
@@ -129,12 +132,17 @@ def main(argv=None):
                     ["docker", "info", "--format", "{{.ServerVersion}}"],
                     capture_output=True,
                     text=True,
+                    timeout=30,
                     check=True,
                 ).stdout.strip()
         elif args.command == "extract":
             from specmind_prep.extract.extract import extract
 
+            if args.exclude_config and not args.exclude_config.is_file():
+                raise ValueError("Exclusion config file not found: " + str(args.exclude_config))
             excluded = read(args.exclude_config) if args.exclude_config else []
+            if not isinstance(excluded, list):
+                raise ValueError("Exclusion config must contain a JSON list")
             result = extract(
                 args.repo,
                 args.output,
@@ -196,6 +204,9 @@ def main(argv=None):
                 from specmind_prep.scope.scope import load_scope
 
                 rows, targets, m = load_scope(args.scope, args.repo)
+                if manifest and (m.get("dataset_fingerprint") != manifest["fingerprint"]
+                                 or m.get("dataset_files") != manifest["files"]):
+                    raise ValueError("Mutation scope does not belong to this dataset")
                 result["scope"] = {"functions": len(rows), "targets": len(targets)}
             if args.mutants:
                 from specmind_eval.inputs.prepared import load_prepared_mutants

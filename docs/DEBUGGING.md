@@ -21,7 +21,7 @@ Function ID là tên đầy đủ, ví dụ `marshmallow.class_registry.get_clas
 
 Correctness pass nghĩa là assertion qua bộ test được chọn trên code gốc. Mutation kill cần bằng chứng assertion violation. `unknown`/`unavailable` nghĩa là chưa đủ bằng chứng, không phải survived. Hàm không có mutant không có mutation score.
 
-Điểm assertion trên outcome đã biết cần đọc cùng số unknown. Lower bound = số kill đã xác nhận / tổng mutant export; upper bound tính thêm các unknown như khả năng kill. Chọn candidate và feedback dùng lower bound để tránh lợi thế từ mất coverage. Chỉ candidate thực sự submit mới được chọn làm best.
+Mutation score = số mutant xác nhận bị assertion kill / tổng mutant đã chuẩn bị cho hàm. Unknown vẫn nằm trong mẫu số và được báo riêng, không được xem là không kill. Correctness fail thì không đo score; không mutant ghi N/A. Kết quả chính chọn candidate correctness pass tốt nhất trong toàn bộ attempt, gồm explore và submit; hòa điểm chọn lượt sớm nhất. Best submission và attempt cuối là chỉ số phụ. Nhãn lịch sử explore/submit giữ nguyên. Pass bộ test kiểm tra không chứng minh đúng toàn API.
 
 ## Dựng lại report
 

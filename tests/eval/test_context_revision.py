@@ -74,15 +74,15 @@ def test_resume_preserves_original_observation_and_no_new_llm(tmp_path):
     assert second['evaluation_updates'][0]['retry'] == 1
 
 
-def test_no_mutants_stops_only_after_passing_submission(tmp_path):
+def test_no_mutants_stops_after_passing_candidate(tmp_path):
     class Ev:
         def correctness(self, _): return {'status': 'pass'}
     responses = iter(['<assert>assert return_value == 1</assert>', '<solution>assert return_value == 1</solution>'])
     def llm(*a): return next(responses), {}
     cfg = {'mode': 'multiturn', 'max_turns': 24, 'threshold': .9}
     s = generate('def f(): return 1', 'f', Ev(), [], cfg, tmp_path/'g.json', llm)
-    assert s['done'] and len(s['attempts']) == 2
-    assert s['stop_reason'] == 'correctness_only_submission'
+    assert s['done'] and len(s['attempts']) == 1
+    assert s['stop_reason'] == 'correctness_only_candidate'
 
 
 def test_empty_context_has_same_prompt_as_baseline(tmp_path):

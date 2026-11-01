@@ -53,7 +53,7 @@ Các cờ của `all`: `--through dataset` (mặc định), `--through scope`, `
 | `model` | `gpt-5.4-mini` | Phải chọn model thực sự có trên endpoint; mẫu yêu cầu bạn điền |
 | `max_turns` | `12` | Giới hạn lượt sinh; **file mẫu đặt 24** |
 | `mode` | `multiturn` | `multiturn`: giữ hội thoại phản hồi; `retry`: chế độ thử lại |
-| `threshold` | `0.9` | Ngưỡng lower bound trong [0,1] dùng cho điều kiện dừng |
+| `threshold` | `0.9` | Ngưỡng mutation score trong [0,1]; candidate correctness pass đạt ngưỡng thì dừng, gồm cả explore |
 | `temperature` | `0` | Tham số lấy mẫu gửi tới API |
 | `max_tokens` | `1024` | Giới hạn token phản hồi gửi tới API |
 | `api_timeout` | `180` | Timeout một request API, giây |

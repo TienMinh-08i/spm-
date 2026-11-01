@@ -64,6 +64,8 @@ def pytest_sessionfinish(session, exitstatus):
                 "links": {n: sorted(ids) for n, ids in links.items()},
                 "reports": reports,
                 "exitstatus": exitstatus,
+                "complete": (not session.shouldstop and not session.shouldfail
+                             and all("teardown" in reports.get(n, {}) for n in nodeids)),
             },
             ensure_ascii=False,
             indent=2,

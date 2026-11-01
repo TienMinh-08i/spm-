@@ -56,8 +56,8 @@ def report(output):
     unknown = sum(f["unknown"] for f in feedback)
     summary["assertion_on_exported"] = {
         "killed": proven, "total": exported, "unknown": unknown,
-        "lower_bound": proven / exported if exported else None,
-        "upper_bound": (proven + unknown) / exported if exported else None,
+        "score": proven / exported if exported else None,
+        "not_killed": exported - proven - unknown,
     }
     write(output / "summary.json", summary)
     write(output / "results.json", records)
@@ -75,8 +75,7 @@ def report(output):
                     "action": attempt["action"],
                     "assertion": attempt["assertion"],
                     "correctness": attempt["correctness"]["status"],
-                    "lower_bound": fb.get("lower_bound"),
-                    "upper_bound": fb.get("upper_bound"),
+                    "mutation_score": fb.get("killed", 0) / fb["total"] if fb.get("total") else None,
                     "exported": fb.get("total"),
                     "unknown": fb.get("unknown"),
                     "seconds": attempt["seconds"],
@@ -101,8 +100,7 @@ def report(output):
             "action",
             "assertion",
             "correctness",
-            "lower_bound",
-            "upper_bound",
+            "mutation_score",
             "exported",
             "unknown",
             "seconds",
@@ -211,14 +209,14 @@ def report(output):
     lines = [
         "# Dataset evaluation v2",
         "",
-        "Unknowns are not survivors. Assertion score uses assertion-known mutants; suite/combined/new use paired-known mutants. 0/0 means unavailable, not zero performance. Suite evaluation is separate; use join-suite for paired attribution.",
+        "Unknowns are not survivors. Mutation score uses all prepared mutants; suite/combined/new use paired-known mutants. No mutants means N/A. Correctness pass means pass on checking tests, not proof across the API. Suite evaluation is separate; use join-suite for paired attribution.",
         "",
         "| Metric | Killed / evaluated | Micro score |",
         "|---|---:|---:|",
     ]
     for key in ("test_suite", "assertion", "combined", "new_assertion"):
         v = summary[key]
-        score = f"{v['micro_score']:.2%}" if v["micro_score"] is not None else "unavailable"
+        score = f"{v['micro_score']:.2%}" if v["micro_score"] is not None else "N/A"
         lines.append(f"| {key} | {v['killed']}/{v['total']} | {score} |")
     lines += [
         "",

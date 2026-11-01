@@ -139,7 +139,7 @@ def test_default_mutation_runs_candidate_only(evaluator, monkeypatch):
     assert row["neutral_arm"] is None
     assert (evaluator.output / "arms" / (row["candidate_arm"] + ".json")).is_file()
     assert result["metrics"]["assertion"]["score"] == 1
-    assert result["metrics"]["feedback"]["lower_bound"] == 1
+    assert result["metrics"]["feedback"]["score"] == 1
     assert result["metrics"]["new_assertion"]["score"] is None
 
 

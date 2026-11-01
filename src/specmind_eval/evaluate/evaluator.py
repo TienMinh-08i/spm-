@@ -136,6 +136,9 @@ class Evaluator:
             "postcondition_runtime_errors": runtime,
             "covered_cases": covered,
             "checks": checks,
+            "failure_detail": next((e["detail"] for e in arm["detail"].get("events", [])
+                                    if e.get("kind") == "report" and e.get("outcome") == "failed" and e.get("detail")),
+                                   "\n".join(arm["detail"].get("logs", []))[:6000]) if status != "pass" else "",
             "log_tail": "\n".join(arm["detail"].get("logs", []))[-4000:] if status != "pass" else "",
         }
 

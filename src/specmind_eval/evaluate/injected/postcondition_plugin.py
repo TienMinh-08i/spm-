@@ -55,7 +55,8 @@ def pytest_runtest_logfinish(nodeid, location):
 
 
 def pytest_runtest_logreport(report):
-    _event(kind="report", report_nodeid=report.nodeid, when=report.when, outcome=report.outcome)
+    _event(kind="report", report_nodeid=report.nodeid, when=report.when, outcome=report.outcome,
+           detail=str(report.longrepr)[:6000] if report.failed else "")
     if (os.environ.get('SPECMIND_SUITE_STOP_ON_KILL') == '1'
             and report.when == 'call' and report.failed
             and report.nodeid in MUTATION_CASES and SESSION is not None):
