@@ -4,7 +4,7 @@
 def build_feedback(correctness, mutation):
     if correctness["status"] != "pass":
         return f"Correctness: {correctness['status']}.\n" + correctness.get(
-            "log_tail", correctness.get("reason", "")
+            "failure_detail", correctness.get("reason") or correctness.get("log_tail", "")
         )
     if mutation is None:
         return "Correctness passed on the checking tests; mutation score: N/A (no mutants). This does not prove correctness across the API."

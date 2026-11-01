@@ -84,4 +84,4 @@ def validate(assertion, source, entrypoint, policy='legacy'):
                 allowed = (isinstance(f.value, ast.Name) and f.value.id in modules
                            and f.attr in MODULES[modules[f.value.id]]) or f.attr in READ_METHODS
             if not allowed:
-                raise ValueError('Only approved pure calls are allowed')
+                raise ValueError('Call not allowed: ' + ast.unparse(node.func) + '. Only approved pure calls are allowed')

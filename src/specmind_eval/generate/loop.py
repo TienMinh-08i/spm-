@@ -11,7 +11,7 @@ from specmind_eval.generate.parsing import double_check_postcondition, parse_mod
 from specmind_eval.common.storage import read, write
 from specmind_eval.evaluate.candidate import evaluate, complete, refresh
 
-SYSTEM = "You are a programming assistant that generates executable python only. You generate correct code, so you only generate code you are sure of. You have Python comments explaining your intent when possible."
+SYSTEM = "Generate a Python postcondition inside exactly one <assert> or <solution> block, following the user response protocol. Output Python code inside that block only."
 
 
 def request_llm(messages, config):

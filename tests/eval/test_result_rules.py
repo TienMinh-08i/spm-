@@ -34,3 +34,18 @@ def test_score_and_report_keep_unknown_in_prepared_denominator(tmp_path):
   text=(tmp_path/file).read_text(encoding="utf8")
   assert "lower_bound" not in text and "upper_bound" not in text
  assert mutation_metrics([])["assertion"]["score"] is None
+
+def test_policy_feedback_names_the_forbidden_call():
+ from specmind_eval.evaluate.policy import validate
+ import pytest
+ with pytest.raises(ValueError,match=r"Call not allowed: set\(x\).issubset"):
+  validate("assert set(x).issubset(set())","def f(x): return x","f","behavioral")
+
+def test_feedback_preserves_first_failure_counterexample():
+ from types import SimpleNamespace
+ from specmind_eval.evaluate.evaluator import Evaluator
+ from specmind_eval.generate.feedback import build_feedback
+ ev=SimpleNamespace(ready=True,arm=lambda _: {"status":"fail","cases":{},"detail":{"events":[{"kind":"report","outcome":"failed","detail":"COUNTEREXAMPLE obj=b'abc'"}],"logs":["start\n"+"summary\n"*1000]}})
+ correctness=Evaluator.correctness(ev,"assert False")
+ assert "COUNTEREXAMPLE" in build_feedback(correctness,None)
+ assert "COUNTEREXAMPLE" not in correctness["log_tail"]
