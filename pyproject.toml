@@ -11,7 +11,6 @@ dependencies = ["openai==2.36.0", "pytest==8.4.2"]
 
 [project.optional-dependencies]
 mutation = ["mutmut==2.5.1"]
-marshmallow = ["simplejson==3.20.2", "tzdata==2025.2"]
 
 [project.scripts]
 specmind-eval = "specmind_eval.cli:main"

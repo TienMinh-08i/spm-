@@ -1,15 +1,19 @@
 """AST source indexing shared by extraction and scope preparation."""
 import ast
+import os
 from pathlib import Path
 
-def source_index(repo):
+def source_index(repo, project=None):
     repo = Path(repo).resolve()
-    package = repo/'src'
-    if not package.exists():
-        package = repo
+    if project is None:
+        from .project import infer_project
+        project = infer_project(repo)
+    package = repo / project['source_root']
+    test_roots = [(repo / value).resolve() for value in project['tests']]
     records, by_location = {}, {}
-    for path in sorted(package.rglob('*.py')):
-        if 'tests' in path.relative_to(package).parts:
+    paths = {p for name in project['packages'] for p in (package / name.replace('.', '/')).rglob('*.py')}
+    for path in sorted(paths):
+        if any(path.resolve().is_relative_to(test) for test in test_roots):
             continue
         text = path.read_text(encoding='utf-8-sig')
         tree = ast.parse(text)
@@ -27,10 +31,11 @@ def source_index(repo):
                     records[key] = {'problem_id': key, 'module': module, 'parent_name': '.'.join(parents) or None,
                                     'entry_point': node.name, 'repo_path': path.relative_to(repo).as_posix(),
                                     'source': source, 'line': node.lineno,
+                                    'code_line': min([node.lineno]+[d.lineno for d in node.decorator_list]),
                                     'decorators': [ast.unparse(d) for d in node.decorator_list],
                                     'async': isinstance(node, ast.AsyncFunctionDef)}
                     first = min([node.lineno]+[d.lineno for d in node.decorator_list])
-                    by_location[(str(path.resolve()).casefold(), first)] = key
+                    by_location[(os.path.normcase(str(path.resolve())), first)] = key
         visit(tree.body, [])
     return records, by_location
 
