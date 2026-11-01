@@ -203,6 +203,9 @@ def main(argv=None):
                 from specmind_prep.scope.scope import load_scope
 
                 rows, targets, m = load_scope(args.scope, args.repo)
+                if manifest and (m.get("dataset_fingerprint") != manifest["fingerprint"]
+                                 or m.get("dataset_files") != manifest["files"]):
+                    raise ValueError("Mutation scope does not belong to this dataset")
                 result["scope"] = {"functions": len(rows), "targets": len(targets)}
             if args.mutants:
                 from specmind_eval.inputs.prepared import load_prepared_mutants

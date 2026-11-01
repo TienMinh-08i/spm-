@@ -40,3 +40,14 @@ def test_missing_exclusion_config_does_not_start_extraction(tmp_path,monkeypatch
  assert main(["extract","--repo",str(tmp_path),"--output",str(tmp_path/"out"),"--exclude-config",str(tmp_path/"missing.json")])==1
  captured=capsys.readouterr()
  assert "Exclusion config file not found" in captured.err+captured.out
+
+@pytest.mark.parametrize("fingerprint,files",[("other",{"a":"hash"}),("dataset",{"b":"hash"})])
+def test_validate_rejects_unrelated_dataset_scope(tmp_path,monkeypatch,capsys,fingerprint,files):
+ from specmind_prep.cli import main
+ import specmind_eval.inputs.prepared as prepared
+ import specmind_prep.scope.scope as scope
+ monkeypatch.setattr(prepared,"load_prepared_dataset",lambda *a:([],{}, {"fingerprint":"dataset","files":{"a":"hash"}}))
+ monkeypatch.setattr(scope,"load_scope",lambda *a:([],[], {"dataset_fingerprint":fingerprint,"dataset_files":files}))
+ assert main(["validate","--repo",str(tmp_path),"--dataset",str(tmp_path/"d"),"--scope",str(tmp_path/"s")])==1
+ captured=capsys.readouterr()
+ assert "does not belong to this dataset" in captured.err+captured.out
