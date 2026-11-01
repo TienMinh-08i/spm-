@@ -175,7 +175,7 @@ def collect_public_aliases(repo_root: Path, package_root=None, package_name=None
         package_name = project['packages'][0]
         package_root = repo_root / project['source_root'] / package_name.replace('.', '/')
     package_name = package_name or package_root.name
-    init_path = package_root / '__init__.py' 
+    init_path = package_root / '__init__.py'
     aliases: dict[str, set[str]] = defaultdict(set)
     try:
         tree = ast.parse(init_path.read_text(encoding="utf-8"))
