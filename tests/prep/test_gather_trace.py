@@ -63,3 +63,17 @@ def test_trace_failure_preserves_candidates_and_lineage(fixture_project,tmp_path
  with (links/'trace_config.json').open('a') as stream:stream.write(' ')
  with pytest.raises(ValueError,match='artifact mismatch'):
   validate_links(links,repo,candidates)
+
+def test_project_config_drives_five_stage_cli(fixture_project,tmp_path):
+ from specmind_prep.cli import main
+ repo,project,_=fixture_project
+ project_file=tmp_path/'project.json'
+ project_file.write_text(json.dumps(project))
+ config=tmp_path/'prepare.json'
+ out=tmp_path/'pipeline'
+ config.write_text(json.dumps({'project':'project.json','repo':str(repo),'output':str(out),'trace_timeout':30,'pytest_timeout':30}))
+ assert main(['all','--config',str(config)])==0
+ assert (out/'candidates/manifest.json').is_file() and (out/'links/manifest.json').is_file()
+ assert not (out/'raw').exists()
+ assert main(['validate','--repo',str(repo),'--candidates',str(out/'candidates'),'--links',str(out/'links'),'--dataset',str(out/'prepared')])==0
+ assert main(['all','--config',str(config),'--resume'])==0

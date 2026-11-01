@@ -23,3 +23,16 @@ def test_flat_layout_scans_only_configured_package(tmp_path):
  project=validate_project({"name":"demo","source_root":".","packages":["acme"],"tests":["testing"]},tmp_path)
  index,_=source_index(tmp_path,project)
  assert set(index)=={"acme.demo.f"}
+
+def test_doctor_reports_missing_project_dependency(repo,tmp_path,monkeypatch,capsys):
+ import importlib.metadata
+ import json
+ from specmind_prep.cli import main
+ project_file=tmp_path/'project.json'
+ project_file.write_text(json.dumps({'name':'demo','packages':['acme'],'dependencies':['required-project-lib>=1']}))
+ def missing(name):raise importlib.metadata.PackageNotFoundError(name)
+ monkeypatch.setattr(importlib.metadata,'version',missing)
+ assert main(['doctor','--repo',str(repo),'--project',str(project_file)])==1
+ result=json.loads(capsys.readouterr().out)
+ assert 'required-project-lib>=1' in result['missing_dependencies']
+ assert result['install_command'][-1]=='required-project-lib>=1'

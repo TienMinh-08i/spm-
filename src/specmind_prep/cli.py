@@ -378,6 +378,8 @@ def main(argv=None):
                     )
                 write(out / "pipeline_summary.json", result)
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        if result.get("missing_dependencies"):
+            return 1
         summaries = [result] + [value for value in result.values() if isinstance(value, dict)]
         incomplete = any(
             row.get("pending_functions", 0) or row.get("pending_targets", 0) for row in summaries
