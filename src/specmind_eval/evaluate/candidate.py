@@ -27,11 +27,14 @@ def complete(attempt, mutants):
 
 
 def refresh(state, mutants):
-    submissions = [a for a in state['attempts'] if a['action'] == 'submit' and a['correctness']['status'] == 'pass']
+    passing = [a for a in state['attempts'] if a['correctness']['status'] == 'pass']
+    submissions = [a for a in passing if a['action'] == 'submit']
     def score(a):
-        value = (a.get('mutation') or {}).get('metrics', {}).get('feedback', {}).get('lower_bound')
+        fb = (a.get('mutation') or {}).get('metrics', {}).get('feedback', {})
+        value = fb.get('score', fb.get('lower_bound'))
         return value if value is not None else -1
-    state['best'] = max(submissions, key=score) if submissions else None
+    state['best'] = max(passing, key=lambda a: (score(a), -a['turn'])) if passing else None
+    state['best_submission'] = max(submissions, key=lambda a: (score(a), -a['turn'])) if submissions else None
     state['latest'] = state['attempts'][-1] if state['attempts'] else None
     state['history_evaluation_complete'] = all(complete(a, mutants) for a in state['attempts'])
     selected = state['best'] or next((a for a in reversed(state['attempts'])

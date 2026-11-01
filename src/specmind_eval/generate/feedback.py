@@ -7,14 +7,14 @@ def build_feedback(correctness, mutation):
             "log_tail", correctness.get("reason", "")
         )
     if mutation is None:
-        return "Correctness passed; completeness unavailable (no mutation result)."
+        return "Correctness passed on the checking tests; mutation score: N/A (no mutants). This does not prove correctness across the API."
     feedback = mutation["metrics"]["feedback"]
     if not feedback["total"]:
-        return "Correctness passed; completeness unavailable (no exported mutants)."
+        return "Correctness passed on the checking tests; mutation score: N/A (no mutants)."
     text = (
-        f"Correctness passed on the original test suite.\n"
-        f"Assertion kills: {feedback['killed']}/{feedback['total']} exported mutants.\n"
-        f"Completeness lower bound: {feedback['lower_bound']:.2%}; upper bound: {feedback['upper_bound']:.2%}.\n"
+        f"Correctness passed on the checking tests; this does not prove correctness across the API.\n"
+        f"Assertion kills: {feedback['killed']}/{feedback['total']} prepared mutants.\n"
+        f"Mutation score: {feedback['killed'] / feedback['total']:.2%}.\n"
         f"Unknown assertion outcomes: {feedback['unknown']}. Unknowns are not survivors.\n"
         "Refine the assertion to detect more incorrect behavior while preserving correctness."
     )

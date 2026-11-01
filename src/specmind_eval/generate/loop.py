@@ -102,9 +102,9 @@ def generate(source, entrypoint, evaluator, mutants, config, path, call=request_
     refresh(state, mutants)
     best = state['best']
     if best and (not mutants or (best.get('mutation') and
-            best['mutation']['metrics']['feedback']['lower_bound'] >= config['threshold'])):
+            best['mutation']['metrics']['feedback'].get('score', best['mutation']['metrics']['feedback'].get('lower_bound')) >= config['threshold'])):
         state['generation_done'] = True
-        state['stop_reason'] = 'correctness_only_submission' if not mutants else 'threshold_reached'
+        state['stop_reason'] = 'correctness_only_candidate' if not mutants else 'threshold_reached'
         refresh(state, mutants)
     if state["generation_done"]:
         write(path, state)
@@ -161,17 +161,12 @@ def generate(source, entrypoint, evaluator, mutants, config, path, call=request_
                 },
             ]
         )
-        if action == "submit" and correctness["status"] == "pass":
+        if correctness["status"] == "pass":
             if not mutants:
                 state['generation_done'] = True
-                state['stop_reason'] = 'correctness_only_submission'
-            score = mutation["metrics"]["feedback"]["lower_bound"] if mutation else None
-            best = state["best"]
-            previous = (
-                best["mutation"]["metrics"]["feedback"]["lower_bound"] if best and best["mutation"] else None
-            )
-            if best is None or (score is not None and (previous is None or score > previous)):
-                state["best"] = attempt
+                state['stop_reason'] = 'correctness_only_candidate'
+            fb = (mutation or {}).get("metrics", {}).get("feedback", {})
+            score = fb.get("score", fb.get("lower_bound"))
             if score is not None and score >= config["threshold"]:
                 state["generation_done"] = True
                 state["stop_reason"] = "threshold_reached"

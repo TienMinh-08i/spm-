@@ -36,19 +36,19 @@ def mutation_metrics(rows):
     proven = sum(r["assertion_killed"] is True for r in rows)
     unknown = sum(r["assertion_killed"] is None for r in rows)
     result["feedback"] = {
-        "metric": "assertion_kill_lower_bound_on_exported_mutants",
+        "metric": "assertion_kills_on_prepared_mutants",
         "killed": proven,
         "total": len(rows),
         "unknown": unknown,
-        "lower_bound": rate(proven, len(rows)),
-        "upper_bound": rate(proven + unknown, len(rows)),
+        "score": rate(proven, len(rows)),
+        "not_killed": len(rows) - proven - unknown,
         "complete": unknown == 0,
     }
     assert result["combined"]["killed"] == result["test_suite"]["killed"] + result["new_assertion"]["killed"]
     assertion_rows = [r for r in rows if r["assertion_killed"] is not None]
     assertion_ids = sorted(r["id"] for r in assertion_rows if r["assertion_killed"])
     result["assertion"] = {
-        "killed": len(assertion_ids), "total": len(assertion_rows),
-        "score": rate(len(assertion_ids), len(assertion_rows)), "ids": assertion_ids,
+        "killed": len(assertion_ids), "total": len(rows),
+        "score": rate(len(assertion_ids), len(rows)), "ids": assertion_ids,
     }
     return result
