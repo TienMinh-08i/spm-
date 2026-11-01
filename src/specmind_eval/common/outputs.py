@@ -8,4 +8,3 @@ def separate_output(output, *sources):
         if output == source or output in source.parents or source in output.parents:
             raise ValueError('Output must be separate from source run, suite and checkout')
     return output
-

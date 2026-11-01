@@ -27,4 +27,3 @@ def write_jsonl(path, rows):
     finally:
         if Path(name).exists():
             Path(name).unlink()
-

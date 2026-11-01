@@ -6,7 +6,7 @@ Có hai config độc lập: chuẩn bị dữ liệu và chạy đánh giá. Sa
 
 ## Chuẩn bị: preparation.example.json
 
-Bảng dưới ghi mặc định của `prepare all` khi bỏ trường; file mẫu có thể ghi giá trị rõ ràng.
+Bảng dưới ghi mặc định của `specmind-prep all` khi bỏ trường; file mẫu có thể ghi giá trị rõ ràng.
 
 | Trường | Mặc định | Ý nghĩa / khi nào đổi |
 |---|---|---|
@@ -89,8 +89,8 @@ Ví dụ đổi model, số lượt và chọn một hàm: chỉnh các trườn
 `experiment` tạo A=none, B=callee, C=caller, D=callgraph. Cần có graph hợp lệ trong `call_graph_dir`; config baseline chỉ có dataset/mutants chưa đủ. `prepare-context --help` mô tả đầu vào graph và usage ZIP, không tự xây graph từ checkout.
 
 ```powershell
-python -m paper_eval_v2 experiment --config configs/context.local.json --output runs/context-01
-python -m paper_eval_v2 compare --output runs/context-01
+python -m specmind_eval experiment --config configs/context.local.json --output runs/context-01
+python -m specmind_eval compare --output runs/context-01
 ```
 
 Chỉ dùng lệnh trên sau khi bạn đã tạo `configs/context.local.json` với graph phù hợp. Đọc `context.json` của từng hàm để biết context thực sự được gửi.

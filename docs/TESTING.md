@@ -4,9 +4,9 @@ Chạy trong venv từ root repository:
 
 ```powershell
 python -m pip check
-python -m paper_eval_v2 --help
-python -m paper_eval_v2 prepare --help
-python -m pytest paper_eval_v2/tests/test_preparation_pipeline.py -q
+python -m specmind_eval --help
+python -m specmind_prep --help
+python -m pytest tests/prep/test_preparation_pipeline.py -q
 ```
 
 Bộ integration preparation dùng checkout nhỏ tạo trong thư mục tạm; kiểm tra liên kết nodeid, probe True/False, property/private method, callee, resume, manifest và mã thoát. Docker được mô phỏng trong test dựng lệnh; test này không chứng minh daemon/image thực tế hoạt động.
@@ -14,7 +14,7 @@ Bộ integration preparation dùng checkout nhỏ tạo trong thư mục tạm; 
 Khi thay phần evaluator chung, chạy bộ đầy đủ:
 
 ```powershell
-python -m pytest paper_eval_v2/tests -q
+python -m pytest tests -q
 ```
 
 Tests dùng response mô phỏng, không gọi API LLM trả phí. Không cần chạy hết dataset thật để kiểm tra một sửa đổi nhỏ. Chọn test liên quan trước; pilot một hàm theo README khi cần kiểm tra môi trường thực.
@@ -31,7 +31,20 @@ Build xong trước khi chạy evaluation/preparation. Để kiểm tra wheel đ
 
 ```powershell
 docker info
-docker build -t specmind-paper-eval-mutmut-py312:latest -f Dockerfile.mutmut .
+docker build -t specmind-paper-eval-mutmut-py312:latest -f docker/mutmut-worker.Dockerfile .
 ```
 
-Sau đó chạy `prepare mutants` trên scope pilot. Image evaluator có mục đích riêng; build bằng `docker build -f paper_eval_v2/Dockerfile -t specmind-eval .` từ root nếu cần chạy evaluator trong container. Khi chuyển môi trường host/container, chuẩn bị và sử dụng artifact trong môi trường nhất quán vì fingerprint có kiểm tra dependency và platform.
+Sau đó chạy `specmind-prep mutants` trên scope pilot. Image evaluator có mục đích riêng; build bằng `docker build -f docker/evaluator.Dockerfile -t specmind-eval .` từ root nếu cần chạy evaluator trong container. Khi chuyển môi trường host/container, chuẩn bị và sử dụng artifact trong môi trường nhất quán vì fingerprint có kiểm tra dependency và platform.
+
+## Khi thay cấu trúc code
+
+Kiểm tra nguồn import trong venv trước khi chạy test:
+
+```powershell
+python -c "import specmind_eval, specmind_prep; print(specmind_eval.__file__); print(specmind_prep.__file__)"
+```
+
+Hai đường dẫn phải thuộc checkout hoặc wheel đang kiểm tra. Giữ nguyên file code
+trong suốt lượt test: thay newline cũng có thể làm fingerprint đổi và khiến test
+resume thất bại. Kiểm tra wheel trong thư mục build sạch để không mang theo file
+từ một build khác. Không đổi manifest của run đã lưu để ép khớp fingerprint.
