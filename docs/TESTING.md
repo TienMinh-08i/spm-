@@ -31,7 +31,7 @@ Build xong trước khi chạy evaluation/preparation. Để kiểm tra wheel đ
 
 ```powershell
 docker info
-docker build -t specmind-paper-eval-mutmut-py312:latest -f docker/mutmut-worker.Dockerfile .
+docker build -t specmind-marshmallow-mutmut:latest -f docker/mutmut-worker.Dockerfile .
 ```
 
 Sau đó chạy `specmind-prep mutants` trên scope pilot. Image evaluator có mục đích riêng; build bằng `docker build -f docker/evaluator.Dockerfile -t specmind-eval .` từ root nếu cần chạy evaluator trong container. Khi chuyển môi trường host/container, chuẩn bị và sử dụng artifact trong môi trường nhất quán vì fingerprint có kiểm tra dependency và platform.

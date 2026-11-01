@@ -17,11 +17,11 @@ Bảng dưới ghi mặc định của `specmind-prep all` khi bỏ trường; f
 | `tests` | `["tests"]` | Mảng đường dẫn test hoặc nodeid, tính từ checkout |
 | `documented_only` | `false` | `false`: hàm có docstring; `true`: lọc thêm symbol trong tài liệu `.rst` |
 | `exclude` | `[]` | Mảng `{ "pattern": "...", "reason": "..." }`; pattern dùng biểu thức pytest `-k` |
-| `trace_timeout` | `1800` | Giây cho lượt pytest quan sát raw; phải lớn hơn 0 |
+| `trace_timeout` | `1800` | Giây cho lượt pytest trace tạo links; phải lớn hơn 0 |
 | `pytest_timeout` | `120` | Timeout pytest ở bước lọc; không phải thời gian tối đa toàn pipeline |
 | `scope_timeout` | `300` | Timeout pytest quan sát callee |
 | `batch_size` | `500` | Số nodeid tối đa mỗi batch; không giới hạn tổng test |
-| `image` | `specmind-paper-eval-mutmut-py312:latest` | Docker image export mutant |
+| `image` | `specmind-marshmallow-mutmut:latest` | Docker image export mutant |
 | `mutmut_timeout` | `1800` | Timeout export mutmut cho target |
 
 Dùng timeout dương và batch_size >= 1. Tăng timeout khi một nhóm test thực sự cần thêm thời gian; giảm batch_size để thu nhỏ mỗi subprocess, đổi lại có nhiều lần khởi động pytest hơn.
