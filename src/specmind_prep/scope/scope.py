@@ -147,6 +147,9 @@ def load_scope(output, repo):
     manifest = read(output/'manifest.json')
     if not manifest or not manifest.get('complete') or manifest.get('schema')!='mutation-scope-v1':
         raise ValueError('Missing or incomplete mutation scope')
+    required = {'scope.json', 'targets.json'}
+    if not isinstance(manifest.get("files"), dict) or not required.issubset(manifest["files"]):
+        raise ValueError("Manifest missing required artifact hashes")
     if manifest['source_environment']!=source_environment(repo):
         raise ValueError('Mutation scope source/environment mismatch')
     for name, value in manifest['files'].items():

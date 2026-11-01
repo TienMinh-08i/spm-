@@ -21,6 +21,9 @@ def check_raw(directory):
     m = read(directory / "manifest.json")
     if not m or m.get("schema") != "raw-marshmallow-v1" or not m.get("complete"):
         raise ValueError("Raw dataset missing or incomplete")
+    required = {'command.json', 'problems.jsonl', 'tests.jsonl', 'summary.json', 'trace.json'}
+    if not isinstance(m.get("files"), dict) or not required.issubset(m["files"]):
+        raise ValueError("Manifest missing required artifact hashes")
     for name, h in m["files"].items():
         if Path(name).name != name or file_hash(directory / name) != h:
             raise ValueError("Raw artifact mismatch: " + name)
