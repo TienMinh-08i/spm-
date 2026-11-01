@@ -35,7 +35,7 @@ def prepare_mutants(scope,repo,output,*,resume=False,image='specmind-paper-eval-
                   'implementation':implementation,'files':{},'timeout':timeout}
         write(output/'manifest.json',manifest)
         write(output/'targets_input.json',targets)
-        command=['docker','run','--rm','--mount',f'type=bind,source={workspace.as_posix()},target=/workspace/specmind_eval,readonly',
+        command=['docker','run','--rm','--mount',f'type=bind,source={workspace.as_posix()},target=/workspace,readonly',
                  '--mount',f'type=bind,source={output.as_posix()},target=/artifacts',
                  '--mount',f'type=bind,source={repo.as_posix()},target=/target_repo,readonly',
                  '-e','PYTHONPATH=/workspace','-e','PYTHONUNBUFFERED=1',image_id,

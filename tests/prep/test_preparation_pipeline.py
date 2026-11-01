@@ -265,6 +265,13 @@ def test_docker_mounts_external_repo_and_maps_callee(tmp_path, monkeypatch):
     assert result["function_mutant_pairs"] == 1
     cmd = commands[0]
     assert "specmind_prep.mutants.worker" in cmd
+    # The mounted source root must be on PYTHONPATH, with both packages beneath it.
+    mount = dict(part.split("=", 1) for part in cmd[cmd.index("--mount") + 1].split(",") if "=" in part)
+    python_path = next(value.split("=", 1)[1] for value in cmd if value.startswith("PYTHONPATH="))
+    assert mount["target"] == python_path
+    mounted_source = Path(mount["source"])
+    assert (mounted_source / "specmind_eval" / "__init__.py").is_file()
+    assert (mounted_source / "specmind_prep" / "mutants" / "worker.py").is_file()
     assert any(f"source={repo.as_posix()},target=/target_repo,readonly" in x for x in cmd)
     assert "/target_repo" in cmd
     assert read(out / "functions.json")[0]["mutants"][0]["kind"] == "callee"
