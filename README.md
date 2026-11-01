@@ -1,11 +1,11 @@
 # SpecMind
 
-Công cụ tạo dataset từ mã nguồn và test của Marshmallow, tạo các biến thể lỗi (*mutant*), rồi sinh và đánh giá assertion bằng mô hình ngôn ngữ.
+Công cụ tạo dataset từ mã nguồn và test của project Python được cấu hình, tạo các biến thể lỗi (*mutant*), rồi sinh và đánh giá assertion bằng mô hình ngôn ngữ.
 
 Một assertion mô tả điều kiện cần đúng sau khi hàm trả về. Dataset chứa hàm và các test đi tới vị trí kiểm tra assertion. Mutant là một thay đổi nhỏ trong code, dùng để kiểm tra assertion có phát hiện hành vi sai hay không.
 
 ```text
-Checkout → hàm và test liên quan → lọc True/False → scope → mutant
+Checkout → gather → trace → lọc True/False → scope → mutant
                                                             ↓
                                       sinh assertion → đánh giá → báo cáo
 ```
@@ -38,10 +38,11 @@ Nếu PowerShell không cho kích hoạt môi trường, thay `python` trong cá
 git clone https://github.com/marshmallow-code/marshmallow.git checkouts/marshmallow
 git -C checkouts/marshmallow checkout 60a803821466f3e537fa2729d65e1aaf7df9d2a4
 python -m pip install --no-deps -e ./checkouts/marshmallow
-python -m specmind_prep doctor --repo checkouts/marshmallow
+python -m pip install simplejson==3.20.2 tzdata==2025.2
+python -m specmind_prep doctor --repo checkouts/marshmallow --project configs/projects/marshmallow.json
 ```
 
-Commit trên khớp config mẫu. Khi đổi commit, cập nhật `expected_commit` trong config chuẩn bị và dùng output mới. Hoàn tất cài đặt dependency trước khi chạy pipeline.
+Commit trên khớp file project mẫu. Khi đổi commit, cập nhật `commit` trong file project và dùng output mới. Hoàn tất cài đặt dependency trước khi chạy pipeline.
 
 ## 3. Tạo config chuẩn bị dữ liệu
 
@@ -49,7 +50,7 @@ Commit trên khớp config mẫu. Khi đổi commit, cập nhật `expected_comm
 Copy-Item configs/preparation.example.json configs/preparation.local.json
 ```
 
-Có thể dùng nguyên nội dung mẫu. Nếu chỉ muốn thử nhanh một hàm, thêm hai trường sau vào JSON trước khi chạy:
+File mẫu trỏ tới `configs/projects/marshmallow.json`. File project mô tả package, thư mục test, PYTHONPATH, commit và dependency; config preparation mô tả đường dẫn checkout/output và tham số của lần chạy. Xem [cấu hình](docs/CONFIGURATION.md). Có thể dùng nguyên nội dung mẫu. Nếu chỉ muốn thử nhanh một hàm, thêm hai trường sau vào JSON trước khi chạy:
 
 ```json
 "tasks": ["marshmallow.class_registry.get_class"],
@@ -75,7 +76,7 @@ Scope xác định phần code được phép thay đổi. Hàm dưới 5 dòng 
 ```powershell
 python -m specmind_prep all --config configs/preparation.local.json --through scope --resume
 docker info
-docker build -t specmind-paper-eval-mutmut-py312:latest -f docker/mutmut-worker.Dockerfile .
+docker build -t specmind-marshmallow-mutmut:latest -f docker/mutmut-worker.Dockerfile --build-arg 'PROJECT_DEPENDENCIES=["simplejson==3.20.2","tzdata==2025.2"]' .
 python -m specmind_prep all --config configs/preparation.local.json --through mutants --resume
 python -m specmind_eval validate-mutants --dataset artifacts/marshmallow/prepared --mutants artifacts/marshmallow/mutants --repo-root checkouts/marshmallow
 ```

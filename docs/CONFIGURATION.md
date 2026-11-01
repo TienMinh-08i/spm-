@@ -10,18 +10,18 @@ Bảng dưới ghi mặc định của `specmind-prep all` khi bỏ trường; f
 
 | Trường | Mặc định | Ý nghĩa / khi nào đổi |
 |---|---|---|
-| `repo` | Bắt buộc | Checkout có `src/marshmallow` và `tests` |
-| `output` | Bắt buộc | Thư mục chứa raw, prepared, scope, mutants; ngoài checkout |
-| `expected_commit` | Không khóa | Commit yêu cầu; mẫu khóa một SHA cụ thể |
+| `repo` | Bắt buộc | Checkout khớp file project |
+| `output` | Bắt buộc | Thư mục chứa candidates, links, prepared, scope, mutants; ngoài checkout |
+| `project` | Bắt buộc cho luồng năm bước | Đường dẫn tới file project, tính từ config; commit được khóa bằng `project.commit` |
 | `tasks` | Mọi hàm ứng viên | Mảng function ID chính xác; dùng cho pilot |
 | `tests` | `["tests"]` | Mảng đường dẫn test hoặc nodeid, tính từ checkout |
 | `documented_only` | `false` | `false`: hàm có docstring; `true`: lọc thêm symbol trong tài liệu `.rst` |
 | `exclude` | `[]` | Mảng `{ "pattern": "...", "reason": "..." }`; pattern dùng biểu thức pytest `-k` |
-| `trace_timeout` | `1800` | Giây cho lượt pytest quan sát raw; phải lớn hơn 0 |
+| `trace_timeout` | `1800` | Giây cho lượt pytest trace tạo links; phải lớn hơn 0 |
 | `pytest_timeout` | `120` | Timeout pytest ở bước lọc; không phải thời gian tối đa toàn pipeline |
 | `scope_timeout` | `300` | Timeout pytest quan sát callee |
 | `batch_size` | `500` | Số nodeid tối đa mỗi batch; không giới hạn tổng test |
-| `image` | `specmind-paper-eval-mutmut-py312:latest` | Docker image export mutant |
+| `image` | `specmind-marshmallow-mutmut:latest` | Docker image export mutant |
 | `mutmut_timeout` | `1800` | Timeout export mutmut cho target |
 
 Dùng timeout dương và batch_size >= 1. Tăng timeout khi một nhóm test thực sự cần thêm thời gian; giảm batch_size để thu nhỏ mỗi subprocess, đổi lại có nhiều lần khởi động pytest hơn.
@@ -94,3 +94,20 @@ python -m specmind_eval compare --output runs/context-01
 ```
 
 Chỉ dùng lệnh trên sau khi bạn đã tạo `configs/context.local.json` với graph phù hợp. Đọc `context.json` của từng hàm để biết context thực sự được gửi.
+
+## File project
+
+Ví dụ: `configs/projects/marshmallow.json`. Đường dẫn bên trong file project tính từ checkout, không tính từ thư mục config. Không dùng đường dẫn tuyệt đối hoặc đi ra ngoài checkout.
+
+| Key | Ý nghĩa |
+|---|---|
+| name | Tên project và tiền tố task ID; bắt buộc |
+| commit | Commit checkout cần khóa; bỏ qua nếu không khóa |
+| source_root | Gốc import package; mặc định src; layout phẳng dùng dấu chấm |
+| packages | Danh sách package được quét, có thể dùng tên chấm; bắt buộc |
+| tests | Thư mục/file test mặc định; mặc định tests |
+| python_path | Các thư mục cần thêm vào PYTHONPATH; mặc định dấu chấm và source_root |
+| docs_dir | Thư mục Sphinx RST; bắt buộc nếu documented_only |
+| dependencies | Yêu cầu pip của target; doctor báo gói thiếu và lệnh cài, không tự cài |
+
+Thông tin project được chép vào manifest và truyền qua các stage. Sửa file project sau đó không sửa artifact đã tạo. Muốn đổi project/settings, dùng output mới. Trace đọc vị trí từ candidates đã niêm phong; không quét lại source để tìm vị trí hàm.

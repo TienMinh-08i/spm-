@@ -53,7 +53,9 @@ def worker(input_file,repo,output,timeout):
             node.decorator_list=[]
             source=ast.unparse(node)+'\n'
             problem=dict(target,source=source,task_id='Target/'+digest(key)[:16])
-            spec=DatasetSpec('marshmallow','marshmallow-code/marshmallow',Path('.'),'','')
+            project = target.get('_project') or {'name': target['problem_id'].split('.')[0]}
+            problem['_python_path'] = project.get('python_path')
+            spec=DatasetSpec(project['name'], project['name'], Path('.'),'','')
             args=SimpleNamespace(_run_dir=str(directory),max_mutants=100000,mutmut_run_timeout=timeout or None)
             _,mutants,manifest=export_mutmut_function_mutants(spec=spec,problem=problem,repo_root=repo,args=args)
             if manifest.get('error'):

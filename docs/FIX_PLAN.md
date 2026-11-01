@@ -7,4 +7,4 @@ Mỗi nhóm có commit và regression test riêng. Giữ dữ liệu thí nghi�
 3. Prompt và feedback: thống nhất thẻ response, mô tả input sau lời gọi, nêu lời gọi bị cấm, giữ traceback/phản ví dụ hữu ích. Pass bộ test không chứng minh đúng toàn API.
 4. Rà soát phản ví dụ bằng replay hẹp; phân biệt assertion quá mạnh, test thiếu và lỗi evaluator. Không sửa lại kết quả cũ.
 
-Project config và tách gather/trace là thay đổi kiến trúc tiếp theo, không thuộc nhóm sửa lỗi này. Docker container smoke test được chủ repo cho phép bỏ qua; kiểm tra dựng lệnh vẫn phải chạy.
+Project config và các artifact candidates/links đã được triển khai; xem PIPELINE.md. Test fixtures không cần Docker hay LLM; kiểm tra dựng lệnh Docker vẫn phải chạy. Smoke test container thật là kiểm tra thủ công riêng.

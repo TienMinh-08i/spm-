@@ -18,11 +18,12 @@ from specmind_eval.common.fingerprint import file_hash, source_environment
 from specmind_eval.common.jsonl import write_jsonl
 
 def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
-                    timeout=120, batch_size=500, force=False):
+                    timeout=120, batch_size=500, force=False, project=None, lineage=None):
     problems, tests, repo = (Path(p).resolve() for p in (problems, tests, repo))
     output = separate_output(output, repo, problems.parent, tests.parent)
     if timeout < 0 or batch_size < 1:
         raise ValueError('Invalid timeout or batch size')
+    project = project or (read(problems.parent / "manifest.json", {}) or {}).get("project")
     candidates, _ = load(problems, tests)
     if tasks:
         wanted = set(tasks)
@@ -37,7 +38,7 @@ def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
                        'specmind_eval/evaluate/pytest_runner.py', 'specmind_eval/inputs/dataset.py', 'specmind_eval/evaluate/evaluator.py', 'specmind_eval/common/fingerprint.py', 'specmind_eval/common/storage.py', 'specmind_eval/common/jsonl.py', 'specmind_eval/common/outputs.py', 'specmind_eval/inputs/prepared.py')}
     fingerprint = digest({'problems': file_hash(problems), 'tests': file_hash(tests),
                           'candidates': candidates, 'environment': env, 'implementation': implementation,
-                          'timeout': timeout, 'batch_size': batch_size})
+                          'timeout': timeout, 'batch_size': batch_size, 'project': project, 'lineage': lineage})
     with run_lock(output):
         previous = read(output/'manifest.json')
         if previous and not resume:
@@ -47,22 +48,22 @@ def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
         manifest = {'schema': SCHEMA, 'fingerprint': fingerprint, 'complete': False,
                     'source_environment': env, 'inputs': {'problems': str(problems), 'tests': str(tests), 'repo': str(repo)},
                     'implementation': implementation, 'settings': {'timeout': timeout, 'batch_size': batch_size},
-                    'planned_functions': len(candidates), 'files': {}}
+                    'planned_functions': len(candidates), 'files': {}, 'project': project, 'lineage': lineage}
         write(output/'manifest.json', manifest)
         collection = output/'collection'
         if not previous:
-            prepare_tests(tests, repo, collection)
+            prepare_tests(tests, repo, collection, python_path=project.get("python_path") if project else None, test_paths=project.get("tests") if project else None)
         if not (collection/'summary.json').exists():
             # Collection may have failed before its checkpoint was created.
             if collection.exists():
                 raise ValueError('Incomplete collection directory; use a new output')
-            prepare_tests(tests, repo, collection)
+            prepare_tests(tests, repo, collection, python_path=project.get("python_path") if project else None, test_paths=project.get("tests") if project else None)
         linked = {}
         for row in read_jsonl(collection/'tests_valid.jsonl'):
             linked.setdefault(row['problem_id'], {})[pytest_nodeid(row)] = row
         results, prepared_problems, prepared_tests = [], [], []
         config = {'pytest_timeout': timeout, 'batch_size': batch_size,
-                  '_evaluation_identity': fingerprint, '_force': force}
+                  '_evaluation_identity': fingerprint, '_force': force, 'python_path': project.get('python_path') if project else None}
         for index, candidate in enumerate(candidates, 1):
             key = candidate.get('problem_id') or candidate['task_id']
             directory = output/'functions'/digest(key)[:16]
@@ -116,3 +117,15 @@ def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
                                ('problems.jsonl', 'tests.jsonl', 'results.json', 'excluded_functions.json', 'summary.json')})
         write(output/'manifest.json', manifest)
     return summary
+
+
+def prepare_linked_dataset(candidates, links, repo, output, **kwargs):
+    """Validate the stage boundary before any tests are collected or run."""
+    from specmind_prep.gather.gather import validate_candidates
+    from specmind_prep.trace.trace import validate_links
+    candidates,links=Path(candidates).resolve(),Path(links).resolve()
+    parent=validate_candidates(candidates,repo)
+    link=validate_links(links,repo,candidates)
+    return prepare_dataset(candidates/'problems.jsonl',links/'tests.jsonl',repo,output,
+                           project=parent['project'],lineage={'candidate_fingerprint':parent['fingerprint'],
+                           'candidate_files':parent['files'],'link_fingerprint':link['fingerprint'],'link_files':link['files']},**kwargs)

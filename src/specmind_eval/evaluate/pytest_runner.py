@@ -51,21 +51,18 @@ def log_indicates_invalid_nodeid(log: str) -> bool:
     return any(marker in log for marker in invalid_markers)
 
 
-def pythonpath_for(repo_root: Path) -> str:
-    candidates = [
-        repo_root,
-        repo_root / "src",
-        repo_root / "keras",
-    ]
+def pythonpath_for(repo_root: Path, python_path=None) -> str:
+    repo_root = Path(repo_root)
+    candidates = [repo_root / item for item in (python_path if python_path is not None else ['.', 'src'])]
     existing = [str(path) for path in candidates if path.exists()]
     existing.append(os.environ.get("PYTHONPATH", ""))
     return os.pathsep.join(item for item in existing if item)
 
 
-def pythonpath_for_mode(repo_root: Path, package_mode: str) -> str:
+def pythonpath_for_mode(repo_root: Path, package_mode: str, python_path=None) -> str:
     if package_mode == "installed":
         return os.environ.get("PYTHONPATH", "")
-    return pythonpath_for(repo_root)
+    return pythonpath_for(repo_root, python_path)
 
 
 def run_pytest_postcondition(
@@ -80,6 +77,7 @@ def run_pytest_postcondition(
     mutant_source: str | None = None,
     mutation_problem: dict[str, Any] | None = None,
     package_mode: str = "repo",
+    python_path=None,
     test_nodeid_mode: str = "path",
     allow_partial_nodeids: bool = False,
     collect_only: bool = False,
@@ -106,7 +104,7 @@ def run_pytest_postcondition(
         env.pop('SPECMIND_MUTATION_PROBLEM_B64', None)
         env.pop("PYTEST_ADDOPTS", None)
         env["PYTHONPATH"] = os.pathsep.join(
-            item for item in [str(tmp_dir), pythonpath_for_mode(repo_root, package_mode), str(Path(__file__).resolve().parents[2])] if item
+            item for item in [str(tmp_dir), pythonpath_for_mode(repo_root, package_mode, python_path), str(Path(__file__).resolve().parents[2])] if item
         )
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"

@@ -76,7 +76,7 @@ python -m specmind_eval join-suite --run runs/experiment-01 --suite runs/suite-0
 | Triệu chứng | Cách kiểm tra |
 |---|---|
 | Không import được package | Kích hoạt đúng venv, cài `pip install --no-deps -e .` từ root |
-| Raw không có đủ test | Xem trace.log; kiểm tra selector, exclusions và tùy chọn pytest dừng sớm |
+| Links không có đủ test | Xem trace.log; kiểm tra selector, exclusions và tùy chọn pytest dừng sớm |
 | Hàm/test bị loại | Đọc excluded_functions.json và decisions trong results.json |
 | Fingerprint mismatch | Kiểm tra config, source, dependency, thư mục làm việc; dùng output mới khi có thay đổi |
 | Docker không phản hồi | Chạy `docker info` riêng; Ctrl+C nếu treo, kiểm tra daemon trước khi export |
@@ -86,3 +86,5 @@ python -m specmind_eval join-suite --run runs/experiment-01 --suite runs/suite-0
 | Unknown nhiều | Đọc events/pytest log để phân biệt mất coverage, exception, timeout và lỗi runtime assertion |
 
 Để hiện traceback preparation: `python -m specmind_prep --traceback dataset ...` với các tham số dataset đầy đủ. Các lệnh khác có `--help` riêng. Mã thoát 0 là lệnh thành công; nhóm preparation dùng 1 cho lỗi bắt được và 2 cho công việc còn pending. Argparse cũng dùng 2 cho tham số sai, nên luôn đọc thông báo kèm theo.
+
+Gather có thể chạy riêng để kiểm tra project config và candidate mà không gọi pytest. Khi thiếu liên kết test, xem stage trace trong [Pipeline](PIPELINE.md). Trace timeout không làm candidates mất trạng thái complete.

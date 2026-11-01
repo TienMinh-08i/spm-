@@ -1,0 +1,10 @@
+{
+  "name": "marshmallow",
+  "commit": "60a803821466f3e537fa2729d65e1aaf7df9d2a4",
+  "source_root": "src",
+  "packages": ["marshmallow"],
+  "tests": ["tests"],
+  "python_path": [".", "src"],
+  "docs_dir": "docs",
+  "dependencies": ["simplejson==3.20.2", "tzdata==2025.2"]
+}

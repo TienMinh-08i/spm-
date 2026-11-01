@@ -229,7 +229,7 @@ def export_mutmut_function_mutants(
         encoding="utf-8",
     )
     export_env = os.environ.copy()
-    export_env["PYTHONPATH"] = pythonpath_for(repo_root)
+    export_env["PYTHONPATH"] = pythonpath_for(repo_root, problem.get("_python_path"))
     baseline = subprocess.run(
         [sys.executable, "-m", "pytest", "tests", "-q"],
         cwd=workspace,

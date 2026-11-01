@@ -154,10 +154,10 @@ def _slice_source(
     return "".join(lines[start:end]).rstrip()
 
 
-def _module_name_from_path(package_root: Path, file_path: Path) -> str:
+def _module_name_from_path(package_root: Path, file_path: Path, package_name=None) -> str:
     rel = file_path.relative_to(package_root).with_suffix("")
     parts = rel.parts[:-1] if rel.name == "__init__" else rel.parts
-    return ".".join((package_root.name, *parts))
+    return ".".join((package_name or package_root.name, *parts))
 
 
 def _repo_relative(repo_root: Path, file_path: Path) -> str:
@@ -168,8 +168,14 @@ def _iter_py_files(root: Path) -> Iterable[Path]:
     yield from root.rglob("*.py")
 
 
-def collect_public_aliases(repo_root: Path) -> dict[str, set[str]]:
-    init_path = repo_root / "src" / "marshmallow" / "__init__.py"
+def collect_public_aliases(repo_root: Path, package_root=None, package_name=None) -> dict[str, set[str]]:
+    if package_root is None:
+        from specmind_prep.project import infer_project
+        project = infer_project(repo_root)
+        package_name = project['packages'][0]
+        package_root = repo_root / project['source_root'] / package_name.replace('.', '/')
+    package_name = package_name or package_root.name
+    init_path = package_root / '__init__.py'
     aliases: dict[str, set[str]] = defaultdict(set)
     try:
         tree = ast.parse(init_path.read_text(encoding="utf-8"))
@@ -184,7 +190,7 @@ def collect_public_aliases(repo_root: Path) -> dict[str, set[str]]:
                 if alias.name == "*":
                     continue
                 local = alias.asname or alias.name
-                import_map[local] = f"{node.module}.{alias.name}"
+                import_map[local] = (package_name + "." if node.level else "") + node.module + "." + alias.name
         elif isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == "__all__":
@@ -196,12 +202,12 @@ def collect_public_aliases(repo_root: Path) -> dict[str, set[str]]:
     for name in exported:
         target = import_map.get(name)
         if target:
-            aliases[target].add(f"marshmallow.{name}")
+            aliases[target].add(f"{package_name}.{name}")
     return aliases
 
 
-def collect_problems(repo_root: Path, package_root: Path) -> list[Problem]:
-    public_aliases = collect_public_aliases(repo_root)
+def collect_problems(repo_root: Path, package_root: Path, package_name=None) -> list[Problem]:
+    public_aliases = collect_public_aliases(repo_root, package_root, package_name)
     problems: list[Problem] = []
     paths = [path for path in _iter_py_files(package_root) if "__pycache__" not in path.parts]
     for path in _progress(paths, "Collecting source functions", "file"):
@@ -211,7 +217,7 @@ def collect_problems(repo_root: Path, package_root: Path) -> list[Problem]:
         except (OSError, UnicodeDecodeError, SyntaxError):
             continue
         extractor = SourceExtractor(
-            module=_module_name_from_path(package_root, path),
+            module=_module_name_from_path(package_root, path, package_name),
             repo_path=_repo_relative(repo_root, path),
             lines=text.splitlines(keepends=True),
             public_aliases=public_aliases,
@@ -231,8 +237,8 @@ def _normalize_doc_symbol(name: str, currentmodule: str | None) -> str | None:
     return symbol
 
 
-def collect_documented_symbols(repo_root: Path, problems: list[Problem]) -> set[str]:
-    docs_root = repo_root / "docs"
+def collect_documented_symbols(repo_root: Path, problems: list[Problem], docs_dir="docs", packages=None) -> set[str]:
+    docs_root = repo_root / docs_dir
     documented: set[str] = set()
     by_module: dict[str, set[str]] = defaultdict(set)
     public_by_module: dict[str, set[str]] = defaultdict(set)
@@ -303,9 +309,9 @@ def collect_documented_symbols(repo_root: Path, problems: list[Problem]) -> set[
                         for problem_id in public_by_module.get(module_name, set()):
                             if problem_id.rsplit(".", 1)[-1] not in exclude_members:
                                 documented.add(problem_id)
-                        if module_name == "marshmallow":
+                        if module_name in (packages or {p.module.split(".")[0] for p in problems}):
                             documented.update(
-                                alias for alias in public_aliases if alias.startswith("marshmallow.")
+                                alias for alias in public_aliases if alias.startswith(module_name + ".")
                             )
             elif directive == "autosummary":
                 k = i + 1

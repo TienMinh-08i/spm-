@@ -16,17 +16,16 @@ Các cách gọi tương đương là `python -m specmind_eval ...` và
 ## Chuẩn bị dữ liệu
 
 ```text
-extract → filter/dataset → scope → mutants/corpus
+gather → trace → filter/dataset → scope → mutants/corpus
 ```
 
-`extract/` đọc source và trace test. `source_index.py` cung cấp bảng hàm
+`gather/` đọc source; `trace/` chạy test và chỉ dùng vị trí từ candidates. `extract/` là facade tương thích. `source_index.py` cung cấp bảng hàm
 cho extraction và scope. `filter/` thu thập nodeid rồi chạy probe True/False.
 `scope/` chọn target và callee. `mutants/` dựng corpus qua worker Docker.
 
 Các stage dùng chung bộ chạy pytest trong `specmind_eval.evaluate`.
-Artifact vẫn gồm `raw`, `prepared`, `scope`, `mutants`; xem PIPELINE.md
-để biết lệnh và các file cần đọc. Extraction vẫn thực hiện thu thập và trace
-trong cùng một stage.
+Artifact chính gồm `candidates`, `links`, `prepared`, `scope`, `mutants`; xem PIPELINE.md
+để biết lệnh và các file cần đọc. Facade extract gọi nối hai stage để hỗ trợ API cũ.
 
 ## Đánh giá
 
@@ -72,3 +71,9 @@ Giữ thuật toán độc lập với CLI; dùng helper chung thay vì sao ché
 Chạy test sát phần sửa trước, rồi kiểm tra subprocess nếu thay đường dẫn.
 Không đổi kỳ vọng test chỉ để che một thay đổi hành vi ngoài phạm vi.
 Không cần LLM, toàn bộ dataset thật hoặc Docker thật cho bộ fixture mặc định.
+
+## Import và fingerprint
+
+`tests/test_layering.py` kiểm tra hướng import, bao gồm plugin chỉ dùng stdlib, pytest và helper injected cùng nhóm. Hai bridge tương thích hiện có (`specmind_eval.cli` và `legacy_mutants`) được khai báo rõ để giữ các lệnh/cấu hình cũ; không cho phép module evaluator khác import preparation.
+
+Fingerprint dựa trên entry module và closure import nội bộ, cộng resource prompt/plugin được đọc dưới dạng file. Không băm toàn bộ thư mục package hoặc test. Gather không phụ thuộc prompt, code sinh assertion hoặc settings trace. Các stage có danh sách implementation riêng tiếp tục niêm phong file thực thi tương ứng.

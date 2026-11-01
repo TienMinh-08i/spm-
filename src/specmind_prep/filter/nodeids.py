@@ -12,7 +12,7 @@ from specmind_eval.common.fingerprint import digest
 from specmind_eval.common.storage import write
 
 
-def prepare_tests(tests, repo, output):
+def prepare_tests(tests, repo, output, python_path=None, test_paths=None):
     tests, repo = Path(tests).resolve(), Path(repo).resolve()
     output = separate_output(output, repo, tests.parent)
     if output.exists():
@@ -20,9 +20,9 @@ def prepare_tests(tests, repo, output):
     rows = read_jsonl(tests)
     if not rows:
         raise ValueError('Empty test dataset')
-    env = dict(os.environ, PYTHONPATH=pythonpath_for(repo), PYTHONIOENCODING='utf-8', PYTHONUTF8='1')
+    env = dict(os.environ, PYTHONPATH=pythonpath_for(repo, python_path), PYTHONIOENCODING='utf-8', PYTHONUTF8='1')
     env.pop('PYTEST_ADDOPTS', None)
-    proc = subprocess.run([sys.executable, '-m', 'pytest', '--collect-only', '-q'], cwd=repo,
+    proc = subprocess.run([sys.executable, '-m', 'pytest', '--collect-only', '-q', *(test_paths or [])], cwd=repo,
                           env=env, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300)
     if proc.returncode:
         raise ValueError('Collection failed; no dataset written:\n' + proc.stdout[-4000:] + proc.stderr[-2000:])

@@ -45,6 +45,7 @@ def _run(config, output, resume=False):
         if not config.get("prepared_dataset") or not config.get("prepared_mutants"):
             raise ValueError("prepared_dataset and prepared_mutants must be supplied together")
         problems, tests_by_id, dataset_manifest = load_prepared_dataset(config["prepared_dataset"], repo)
+        config = dict(config, python_path=(dataset_manifest.get("project") or {}).get("python_path"))
         corpus, corpus_manifest = load_prepared_mutants(config["prepared_mutants"], repo, dataset_manifest)
         if any((p.get("problem_id") or p["task_id"]) not in corpus for p in problems):
             raise ValueError("Prepared corpus missing functions")
