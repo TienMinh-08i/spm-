@@ -150,6 +150,8 @@ def extract(
         if proc.returncode not in (0, 1) or not (output / "trace.json").exists():
             raise ValueError("Trace failed or collection incomplete; inspect trace.log")
         trace = read(output / "trace.json")
+        if not trace.get("complete", False):
+            raise ValueError("Trace stopped before all selected tests completed; inspect trace.log")
         rows = []
         for nodeid, ids in sorted(trace["links"].items()):
             for key in ids:
