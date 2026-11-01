@@ -7,7 +7,7 @@
   "scope_timeout": 300,
   "batch_size": 500,
   "exclude": [],
-  "image": "specmind-paper-eval-mutmut-py312:latest",
+  "image": "specmind-marshmallow-mutmut:latest",
   "mutmut_timeout": 1800,
   "project": "projects/marshmallow.json"
 }

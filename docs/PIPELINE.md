@@ -1,96 +1,90 @@
-# Tạo dataset và mutant từng bước
+# Chuẩn bị dữ liệu theo năm bước
 
-Thực hiện các lệnh từ root repo, trong môi trường Python đã cài dependency. Nếu đổi đường dẫn ví dụ, đổi thống nhất ở mọi bước. Không build package hoặc pip install trong lúc pipeline đang chạy.
+Chạy từ root repo sau khi cài package trong venv. Ví dụ dùng checkout ở `checkouts/marshmallow` và file project `configs/projects/marshmallow.json`. Mỗi output phải nằm ngoài checkout; dùng output mới khi đổi đầu vào.
 
-## 1. Raw: hàm và liên kết test
-
-```powershell
-python -m specmind_prep extract --repo checkouts/marshmallow --output artifacts/manual/raw
-```
-
-Chỉ quan sát một hàm và một file test:
+## 1. Gather: thu thập hàm
 
 ```powershell
-python -m specmind_prep extract --repo checkouts/marshmallow --output artifacts/pilot/raw --task marshmallow.class_registry.get_class --test tests/test_registry.py
+python -m specmind_prep gather --repo checkouts/marshmallow --project configs/projects/marshmallow.json --output artifacts/manual/candidates
 ```
 
-`--task` và `--test` có thể lặp. `--documented-only` bật lọc symbol được tài liệu RST liệt kê. `--expected-commit SHA` kiểm tra commit; `--timeout 1800` giới hạn lượt trace. Không thêm `--task` thì lấy mọi hàm ứng viên có docstring.
+Không chạy pytest và không import code target. Có thể thêm `--task FUNCTION_ID`, `--documented-only` hoặc `--resume`.
 
-| File trong raw/ | Nội dung |
+| File | Nội dung |
 |---|---|
-| `problems.jsonl` | Một đối tượng JSON mỗi dòng: function ID, module, source, docstring, vị trí |
-| `tests.jsonl` | Liên kết function ID với pytest nodeid, đường dẫn test và report trace |
-| `trace.json` | Test đã collect, các liên kết quan sát và report từng phase |
-| `trace.log` | Output pytest |
-| `command.json` | Lệnh thực thi và thư mục làm việc |
-| `summary.json` | Số hàm, liên kết, test, hàm chưa liên kết |
-| `manifest.json` | Trạng thái, môi trường, cấu hình và hash file |
+| problems.jsonl | Hàm, source, repo_path, dòng def và code_line tính cả decorator |
+| summary.json | Số candidate |
+| manifest.json | Schema candidates-v1, project, commit, fingerprint và hash file |
 
-Liên kết chỉ được ghi trong call phase, không lấy các lời gọi chỉ xảy ra lúc setup fixture. Nodeid giữ nguyên tham số, kể cả chuỗi có `::`. Raw có thể chứa test gốc fail; test đó sẽ được xử lý ở bước lọc.
-
-**Để trace đủ test:** bỏ tùy chọn dừng sớm `-x`/`--maxfail` trong cấu hình pytest của checkout. Kiểm tra `trace.log` không báo dừng sớm; `complete` của raw chưa tự phát hiện đầy đủ trường hợp này. Nếu dùng `--exclude-config path.json`, bảo đảm file tồn tại; nội dung là mảng pattern/reason như bảng tham số. Xem `excluded_tests` trong summary để xác nhận exclusions thực sự được áp dụng.
-
-## 2. Lọc test tới assertion
+## 2. Trace: quan sát test
 
 ```powershell
-python -m specmind_prep dataset --raw artifacts/manual/raw --repo checkouts/marshmallow --output artifacts/manual/prepared --timeout 120 --batch-size 500
+python -m specmind_prep trace --repo checkouts/marshmallow --candidates artifacts/manual/candidates --output artifacts/manual/links --timeout 1800
 ```
 
-Với mỗi hàm, giữ test pass khi chèn `assert True`, rồi fail có bằng chứng tại assertion khi thay bằng `assert False`. Exception trước return, lỗi collection/setup hoặc test nuốt AssertionError không được coi là đạt điều kiện.
+Thêm `--test PATH_OR_NODEID` để thu hẹp test; `--exclude-config exclusions.json` phải chứa danh sách `{pattern, reason}`. Test có thể fail ở bước này nhưng phải chạy hết tập đã chọn. Trace dừng sớm hoặc timeout không làm hỏng candidates. Đổi tests/exclude/timeout thì dùng một output links mới.
 
-- `problems.jsonl`, `tests.jsonl`: dữ liệu đã chọn.
-- `results.json`: quyết định giữ/loại từng test theo hàm.
-- `excluded_functions.json`: hàm bị loại và lý do.
-- `progress.json`, `summary.json`: tiến độ và số lượng.
-- `functions/<hash>/`: input, kết quả probe và bằng chứng pytest.
-
-`selected_links` đếm cặp hàm–test; một test có thể liên quan nhiều hàm. `unique_tests` là số nodeid khác nhau. `pending_functions` khác 0 nghĩa là chưa hoàn tất; kiểm tra lỗi rồi resume. `--force` buộc đánh giá lại bước lọc, chỉ dùng khi có lý do cụ thể.
-
-## 3. Chọn scope mutation
-
-```powershell
-python -m specmind_prep scope --dataset artifacts/manual/prepared --repo checkouts/marshmallow --output artifacts/manual/scope --timeout 300
-```
-
-Đếm dòng thân hàm sau khi chuẩn hóa AST, bỏ docstring đầu; không đếm comment hay dòng trống. Hàm dưới 5 dòng được xét thêm callee nội bộ trực tiếp, không mở rộng đệ quy.
-
-- `scope.json`: root, số dòng, target và cách xác định callee.
-- `targets.json`: source của các target duy nhất.
-- `trace/`: bằng chứng lời gọi.
-
-`observed` nghĩa là quan sát được trong test; `lexical_unobserved` là candidate tìm từ source nhưng chưa quan sát. Hai trạng thái không tương đương coverage.
-
-## 4. Export mutant
-
-Docker cần hoạt động trước khi chạy:
-
-```powershell
-docker info
-docker build -t specmind-paper-eval-mutmut-py312:latest -f docker/mutmut-worker.Dockerfile .
-python -m specmind_prep mutants --scope artifacts/manual/scope --repo checkouts/marshmallow --output artifacts/manual/mutants --timeout 1800
-```
-
-`--image` chọn image khác. `--timeout` dành cho mutmut. Package và checkout được mount chỉ đọc; output có mount ghi riêng. Một target dùng chung chỉ export một lần. Mỗi mutant thay đúng một target; assertion vẫn ở root.
-
-| File trong mutants/ | Dùng để xem |
+| File | Nội dung |
 |---|---|
-| `functions.json` | Mutant ứng với mỗi hàm gốc, target là self hay callee |
-| `targets/<hash>/export.json` | Target source, số export, lỗi và các trường hợp bị loại |
-| `targets/<hash>/mutmut_function_exports/` | Source/diff mutant và log export; theo đường dẫn trong manifest |
-| `summary.json` | Tổng target, mutant duy nhất, cặp hàm–mutant, pending |
-| `docker.log` | Output của worker |
-| `manifest.json` | Corpus hoàn tất và liên kết với dataset |
+| tests.jsonl | Các cặp function ID–nodeid quan sát được |
+| trace.json, trace.log | Bằng chứng và log pytest |
+| trace_config.json, command.json | Vị trí theo dõi và lệnh thực thi; có hash niêm phong |
+| summary.json | Hàm liên kết, test và trạng thái pytest |
+| manifest.json | Schema links-v1; trỏ fingerprint và hash file candidates |
 
-Số mutant duy nhất và số cặp hàm–mutant có thể khác nhau vì callee được dùng chung. Các nhãn của công cụ export không phải điểm assertion; điểm đó được đo trong `run`.
-
-## 5. Validate và resume
+## 3. Dataset: lọc True/False
 
 ```powershell
-python -m specmind_prep validate --repo checkouts/marshmallow --raw artifacts/manual/raw --dataset artifacts/manual/prepared --scope artifacts/manual/scope
-python -m specmind_eval validate-mutants --repo-root checkouts/marshmallow --dataset artifacts/manual/prepared --mutants artifacts/manual/mutants
-python -m specmind_prep inspect --output artifacts/manual/prepared
+python -m specmind_prep dataset --repo checkouts/marshmallow --candidates artifacts/manual/candidates --links artifacts/manual/links --output artifacts/manual/prepared --timeout 120
 ```
 
-Lệnh validate đầu kiểm tra từng artifact; chưa xác nhận quan hệ dataset–scope khi bạn ghép thủ công. Dùng scope tạo từ chính dataset đó, cùng một thư mục pipeline. Manifest cần đầy đủ danh sách file; không tự sửa manifest. Runner từ chối corpus thiếu hoặc không khớp dataset.
+Lệnh kiểm tra liên kết candidates–links trước khi chạy test. Giữ test pass khi chèn assert True và fail do assert False tại điểm kiểm tra.
 
-Thêm `--resume` vào đúng lệnh đã chạy để tiếp tục sau gián đoạn. Đầu vào/config/môi trường thay đổi thì chọn output mới. Không chạy hai process ghi cùng output. Các bước chuẩn bị không gọi LLM.
+| File | Nội dung |
+|---|---|
+| problems.jsonl, tests.jsonl | Dataset đã lọc |
+| results.json, excluded_functions.json | Quyết định giữ/loại và bằng chứng |
+| summary.json, progress.json | Số hàm ready/excluded/pending |
+| manifest.json | Hash file, project và lineage của hai artifact đầu vào |
+
+## 4. Scope: chọn nơi tạo mutant
+
+```powershell
+python -m specmind_prep scope --repo checkouts/marshmallow --dataset artifacts/manual/prepared --output artifacts/manual/scope
+```
+
+| File | Nội dung |
+|---|---|
+| scope.json, targets.json | Hàm gốc và target/callee được chọn |
+| trace/ | Bằng chứng gọi hàm |
+| summary.json, manifest.json | Tổng hợp, fingerprint và liên kết dataset |
+
+## 5. Mutants: tạo corpus riêng
+
+```powershell
+docker build -t specmind-marshmallow-mutmut:latest -f docker/mutmut-worker.Dockerfile --build-arg 'PROJECT_DEPENDENCIES=["simplejson==3.20.2","tzdata==2025.2"]' .
+python -m specmind_prep mutants --repo checkouts/marshmallow --scope artifacts/manual/scope --output artifacts/manual/mutants --image specmind-marshmallow-mutmut:latest
+```
+
+Dependencies build arg là mảng JSON lấy từ file project. Image evaluator cũng nhận build arg này nếu cần chạy target trong container. Tool không tự cài dependency của target vào máy host.
+
+| File | Nội dung |
+|---|---|
+| targets_input.json, targets/ | Đầu vào worker và export từng target |
+| functions.json | Mutant đã chuẩn bị cho từng hàm |
+| summary.json, manifest.json | Số lượng, hash, project và liên kết dataset/scope |
+
+## Chạy nối tiếp và kiểm tra
+
+```powershell
+python -m specmind_prep all --config configs/preparation.local.json
+python -m specmind_prep validate --repo checkouts/marshmallow --candidates artifacts/manual/candidates --links artifacts/manual/links --dataset artifacts/manual/prepared --scope artifacts/manual/scope
+```
+
+Config có key `project` dùng luồng năm bước; mặc định `all` dừng sau dataset. Dùng `--through scope` hoặc `--through mutants` khi muốn tiếp tục. `inspect --output DIRECTORY` chỉ đọc summary/progress.
+
+Luồng đánh giá đọc prepared dataset và mutant đã chuẩn bị; không tạo/lọc lại trong mỗi attempt. Bộ test cục bộ không cần Docker hay LLM.
+
+## Dữ liệu đã lưu
+
+Không chuyển đổi hoặc ghi đè raw/dataset/run cũ. Để dùng luồng năm bước, tạo candidates/links và output mới. API Python `extract` và CLI `extract`/`--raw` vẫn có facade tương thích cho người dùng hiện có; config không có `project` cũng dùng đường này. Các facade gọi chung gather/trace, không có một engine trace khác. Artifact raw đã lưu vẫn được bộ đọc hash kiểm tra theo schema của nó.
