@@ -34,6 +34,12 @@ def build_parser():
     parser = argparse.ArgumentParser(description="Project preparation stages (no LLM)")
     parser.add_argument("--traceback", action="store_true", help="Show full Python traceback for debugging")
     sub = parser.add_subparsers(dest="command", required=True)
+    refs = sub.add_parser("references", help="Locate a function and inspect static caller references; no execution")
+    refs.add_argument("--repo", type=path, required=True)
+    refs.add_argument("--project", type=path, required=True)
+    refs.add_argument("--function", required=True, help="Fully qualified function ID")
+    refs.add_argument("--context-lines", type=int, default=3)
+    refs.add_argument("--output", type=path, help="New JSON file; never overwrite existing files")
     doctor = sub.add_parser("doctor", help="Check Python, package dependencies, checkout and optional Docker")
     doctor.add_argument("--repo", type=path)
     doctor.add_argument("--docker", action="store_true")
@@ -129,7 +135,19 @@ def main(argv=None):
     try:
         from specmind_eval.common.storage import read
 
-        if args.command == "doctor":
+        if args.command == "references":
+            from specmind_prep.project import load_project
+            from specmind_prep.source_index import source_index
+            from specmind_prep.references import references
+            project = load_project(args.project, args.repo)
+            index, _ = source_index(args.repo, project)
+            result = references(args.repo, index, args.function, context_lines=args.context_lines)
+            if args.output:
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                with args.output.open("x", encoding="utf8") as stream:
+                    json.dump(result, stream, ensure_ascii=False, indent=2)
+                    stream.write("\n")
+        elif args.command == "doctor":
             import importlib.metadata
 
             from specmind_prep.project import load_project, infer_project
