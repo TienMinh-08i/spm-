@@ -10,8 +10,7 @@
 
 Sau khi cài package, dùng `specmind-eval ...` và `specmind-prep ...`.
 Các cách gọi tương đương là `python -m specmind_eval ...` và
-`python -m specmind_prep ...`. `python -m paper_eval_v2 ...` cũng chuyển
-đến CLI đánh giá; `prepare` chuyển tiếp tới CLI chuẩn bị.
+`python -m specmind_prep ...`.
 
 ## Chuẩn bị dữ liệu
 

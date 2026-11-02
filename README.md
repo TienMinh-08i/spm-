@@ -133,4 +133,4 @@ python -m specmind_eval run --config configs/run.local.json --output runs/experi
 | Kiểm tra cài đặt và test code | [Kiểm thử](docs/TESTING.md) |
 | Tìm module cần sửa và hiểu phụ thuộc | [Cấu trúc code](docs/ARCHITECTURE.md) |
 
-`checkouts/`, `artifacts/`, `runs/`, `.venv/` và `*.local.json` là dữ liệu/cấu hình trên máy bạn, được Git bỏ qua. Sau khi cài đặt, dùng `specmind-eval` cho đánh giá và `specmind-prep` cho chuẩn bị. Hai lệnh tương đương là `python -m specmind_eval` và `python -m specmind_prep`. Lệnh `python -m paper_eval_v2` vẫn chuyển tiếp tới CLI đánh giá.
+`checkouts/`, `artifacts/`, `runs/`, `.venv/` và `*.local.json` là dữ liệu/cấu hình trên máy bạn, được Git bỏ qua. Sau khi cài đặt, dùng `specmind-eval` cho đánh giá và `specmind-prep` cho chuẩn bị. Hai lệnh tương đương là `python -m specmind_eval` và `python -m specmind_prep`.
