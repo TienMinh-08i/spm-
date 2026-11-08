@@ -141,3 +141,5 @@ Tra cứu vị trí hàm và caller trước khi slicing: [Function references](
 Hướng dẫn [chuẩn bị dataset và mutant](docs/PREPARATION_WORKFLOW.md).
 
 Để chạy bằng venv riêng đã khóa dependency, xem [môi trường ổn định](docs/STABLE_ENVIRONMENT.md).
+
+Hướng dẫn [dynamic slicing và backward query](docs/SLICING.md).

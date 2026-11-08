@@ -34,6 +34,20 @@ def build_parser():
     parser = argparse.ArgumentParser(description="Project preparation stages and explicit LLM mutant generation")
     parser.add_argument("--traceback", action="store_true", help="Show full Python traceback for debugging")
     sub = parser.add_subparsers(dest="command", required=True)
+    tracing = sub.add_parser("slice-trace", help="Trace one exact test for primitive-local dynamic slicing")
+    for name in ("repo", "project", "output"):
+        tracing.add_argument("--" + name, type=path, required=True)
+    tracing.add_argument("--test", required=True, help="Exact pytest nodeid, including parametrization")
+    tracing.add_argument("--target", required=True, help="Top-level function ID; initial primitive-local model")
+    tracing.add_argument("--timeout", type=float, default=60)
+    tracing.add_argument("--max-events", type=int, default=20000)
+    slicing = sub.add_parser("slice-call", help="Backward variable query on an existing occurrence-based DDG")
+    for name in ("repo", "trace", "output"):
+        slicing.add_argument("--" + name, type=path, required=True)
+    slicing.add_argument("--event", type=int, required=True)
+    slicing.add_argument("--variable", required=True)
+    slicing.add_argument("--when", choices=["before", "after"], default="before")
+    slicing.add_argument("--direction", choices=["backward"], default="backward")
     docs = sub.add_parser("build-docs", help="Step 0: build HTML docs at project.commit in a separate checkout/venv")
     docs.add_argument("--project", type=path, required=True, help="Project config with commit, docs_dir, docs_build")
     docs.add_argument("--source", type=path, required=True, help="Local git repo to clone from (read-only)")
@@ -158,7 +172,35 @@ def main(argv=None):
     try:
         from specmind_eval.common.storage import read
 
-        if args.command == "build-docs":
+        if args.command == "slice-trace":
+            from specmind_prep.project import load_project
+            from specmind_prep.slicing import trace_function
+
+            project = load_project(args.project, args.repo)
+            result = trace_function(
+                args.repo,
+                project,
+                args.test,
+                args.target,
+                args.output,
+                timeout=args.timeout,
+                max_events=args.max_events,
+            )
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["status"] == "complete_supported" else 2
+        elif args.command == "slice-call":
+            from specmind_prep.slicing import query_slice
+            from specmind_eval.common.outputs import separate_output
+
+            args.output = separate_output(args.output, args.repo, args.trace)
+            result = query_slice(args.trace, args.repo, args.event, args.variable, when=args.when)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            with args.output.open("x", encoding="utf-8") as stream:
+                json.dump(result, stream, ensure_ascii=False, indent=2)
+                stream.write("\n")
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 0 if result["status"] == "complete_supported" else 2
+        elif args.command == "build-docs":
             from specmind_prep.docs_build import build_docs
             result = build_docs(args.project, args.source, args.workdir, args.output,
                                 timeout=args.timeout, python=args.python)

@@ -263,6 +263,51 @@ def test_multiple_collected_cases_do_not_execute(tmp_path, monkeypatch):
     assert not counter.exists()
 
 
+def test_cli_trace_then_query_and_no_overwrite(tmp_path, capsys):
+    from specmind_prep.cli import main
+
+    repo, project, out = fixture(
+        tmp_path,
+        "def f(x):\n    y=x+1\n    return y\n",
+        "from demo import f\ndef test_f():\n    assert f(2)==3\n",
+    )
+    cfg = tmp_path / "project.json"
+    write(cfg, project)
+    assert (
+        main(
+            [
+                "slice-trace",
+                "--repo",
+                str(repo),
+                "--project",
+                str(cfg),
+                "--test",
+                "tests/test_example.py::test_f",
+                "--target",
+                "demo.f",
+                "--output",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    output = tmp_path / "slice.json"
+    args = [
+        "slice-call",
+        "--repo",
+        str(repo),
+        "--trace",
+        str(out),
+        "--event",
+        str(return_event(out)),
+        "--variable",
+        "y",
+        "--output",
+        str(output),
+    ]
+    assert main(args) == 0
+    before = output.read_bytes()
+    assert main(args) == 1 and output.read_bytes() == before
 
 
 def test_normal_call_in_a_callers_except_block_is_not_a_target_exception(tmp_path):
@@ -366,6 +411,33 @@ def test_fixture_and_test_calls_have_distinct_phases(tmp_path):
     assert [c["phase"] for c in read(out / "calls.json")] == ["setup", "call"]
 
 
+def test_slice_output_cannot_modify_source_or_sealed_trace(tmp_path):
+    from specmind_prep.cli import main
+
+    repo, project, out = fixture(
+        tmp_path, "def f(x):\n    return x\n", "from demo import f\ndef test_f():\n    assert f(2)==2\n"
+    )
+    assert run(repo, project, out)["status"] == "complete_supported"
+    for output in (repo / "new_slice.json", out / "new_slice.json"):
+        assert (
+            main(
+                [
+                    "slice-call",
+                    "--repo",
+                    str(repo),
+                    "--trace",
+                    str(out),
+                    "--event",
+                    str(return_event(out)),
+                    "--variable",
+                    "x",
+                    "--output",
+                    str(output),
+                ]
+            )
+            == 1
+        )
+        assert not output.exists()
 
 
 def test_complete_trace_requires_baseline_behavior_evidence(tmp_path):
