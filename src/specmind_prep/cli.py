@@ -31,7 +31,7 @@ def check_raw(directory):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Project preparation stages (no LLM)")
+    parser = argparse.ArgumentParser(description="Project preparation stages and explicit LLM mutant generation")
     parser.add_argument("--traceback", action="store_true", help="Show full Python traceback for debugging")
     sub = parser.add_subparsers(dest="command", required=True)
     docs = sub.add_parser("build-docs", help="Step 0: build HTML docs at project.commit in a separate checkout/venv")
@@ -49,6 +49,14 @@ def build_parser():
         selection.add_argument('--'+name, type=path, required=True)
     selection.add_argument('--review-id', action='append', default=[])
     selection.add_argument('--test', action='append')
+    llm = sub.add_parser('llm-mutants', help='Step 7: explicit cached LLM preparation, separate from evaluation')
+    for name in ('scope', 'dataset', 'repo', 'output'):
+        llm.add_argument('--'+name, type=path, required=True)
+    llm.add_argument('--model', required=True)
+    llm.add_argument('--method', choices=['line', 'function'], default='line')
+    llm.add_argument('--max-targets', type=int, default=2)
+    llm.add_argument('--count', type=int, default=10)
+    llm.add_argument('--reuse-from', type=path)
     refs = sub.add_parser("references", help="Locate a function and inspect static caller references; no execution")
     refs.add_argument("--repo", type=path, required=True)
     refs.add_argument("--project", type=path, required=True)
@@ -163,6 +171,10 @@ def main(argv=None):
             from specmind_prep.selection import prepare_selection
             result = prepare_selection(args.repo, args.project, args.docs, args.selection, args.output,
                                        review_ids=args.review_id, tests=args.test)
+        elif args.command == 'llm-mutants':
+            from specmind_prep.llm_mutants import prepare
+            result = prepare(args.scope, args.dataset, args.repo, args.output, args.model, count=args.count,
+                             method=args.method, max_targets=args.max_targets, reuse_from=args.reuse_from)
         elif args.command == "references":
             from specmind_prep.project import load_project
             from specmind_prep.source_index import source_index
