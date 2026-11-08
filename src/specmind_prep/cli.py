@@ -102,7 +102,7 @@ def build_parser():
     prep.add_argument("--resume", action="store_true")
     prep.add_argument("--force", action="store_true")
     scope = sub.add_parser(
-        "scope", help="Choose self and one-level callees for functions with <5 AST body lines"
+        "scope", help="Choose exactly the function itself as mutation target; no test rerun"
     )
     scope.add_argument("--dataset", type=path, required=True)
     scope.add_argument("--repo", type=path, required=True)

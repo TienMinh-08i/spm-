@@ -107,15 +107,15 @@ def test_two_probes_private_property_and_readonly_loader(prepared):
     assert reasons["test_bad"] == "true_not_passed"
 
 
-def test_scope_is_one_level_and_resume(prepared, monkeypatch):
+def test_scope_is_self_only_and_resume(prepared, monkeypatch):
     root, repo, raw, dataset, summary, ds = prepared
     scope = root / "scope"
     prepare_scope(dataset, repo, scope, timeout=30)
     rows = read(scope / "scope.json")
     wrapper = next(r for r in rows if r["assertion_target"] == "marshmallow.wrapper")
-    assert {r["target"] for r in wrapper["mutation_targets"]} == {"marshmallow.wrapper", "marshmallow.inc"}
+    assert {r["target"] for r in wrapper["mutation_targets"]} == {"marshmallow.wrapper"}
     total = next(r for r in rows if r["assertion_target"] == "marshmallow.C.total")
-    assert {"marshmallow.C.prop", "marshmallow.C.__g"} <= {r["target"] for r in total["mutation_targets"]}
+    assert {r["target"] for r in total["mutation_targets"]} == {"marshmallow.C.total"}
     original_run = subprocess.run
 
     def forbidden(*a, **k):

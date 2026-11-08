@@ -94,3 +94,22 @@ def test_implicit_static_new_descriptor_compilation():
         def __new__(cls): return object.__new__(cls)
     mutant=compile_mutant('def __new__(cls):\n    return object.__new__(cls)\n', Factory.__new__,sys.modules[__name__])
     assert isinstance(mutant(Factory),Factory)
+
+
+def test_standard_scope_is_self_only_and_never_runs_pytest(tmp_path, monkeypatch):
+    from specmind_prep.scope import scope as module
+    from specmind_eval.common.storage import read
+    problem = {'problem_id': 'p.f', 'source': 'def f(): return helper()'}
+    parent = {'fingerprint': 'dataset', 'files': {'tests.jsonl': 'hash'}, 'project': {}}
+    monkeypatch.setattr(module, 'load_prepared_dataset', lambda *a: ([problem], {'p.f': []}, parent))
+    monkeypatch.setattr(module, 'source_environment', lambda *a: {})
+    def forbidden(*a, **kw):
+        pytest.fail('Self scope must not inspect callees or run tests')
+    import subprocess
+    monkeypatch.setattr(subprocess, 'run', forbidden)
+    out = tmp_path/'scope'
+    result = module.prepare_scope(tmp_path/'dataset', tmp_path/'repo', out)
+    rows, targets, manifest = module.load_scope(out, tmp_path/'repo')
+    assert result['callee_targets'] == 0 and manifest['policy'] == 'self-only-v1'
+    assert rows[0]['mutation_targets'][0]['target'] == 'p.f' and targets == [problem]
+    assert module.prepare_scope(tmp_path/'dataset', tmp_path/'repo', out, resume=True) == result
