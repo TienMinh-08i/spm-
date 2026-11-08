@@ -127,6 +127,7 @@ python -m specmind_eval run --config configs/run.local.json --output runs/experi
 
 | Cần làm gì? | Đọc ở đâu? |
 |---|---|
+| Build tài liệu tại commit đã pin (Step 0) | [Build docs](docs/DOCS_BUILD.md) |
 | Chỉnh model, số attempt, timeout, batch, tập hàm/test | [Tham số](docs/CONFIGURATION.md) |
 | Chạy riêng từng bước tạo dữ liệu, hiểu output | [Pipeline](docs/PIPELINE.md) |
 | Đọc kết quả, replay, xử lý lỗi | [Kết quả và debug](docs/DEBUGGING.md) |
@@ -136,3 +137,5 @@ python -m specmind_eval run --config configs/run.local.json --output runs/experi
 `checkouts/`, `artifacts/`, `runs/`, `.venv/` và `*.local.json` là dữ liệu/cấu hình trên máy bạn, được Git bỏ qua. Sau khi cài đặt, dùng `specmind-eval` cho đánh giá và `specmind-prep` cho chuẩn bị. Hai lệnh tương đương là `python -m specmind_eval` và `python -m specmind_prep`.
 
 Tra cứu vị trí hàm và caller trước khi slicing: [Function references](docs/FUNCTION_REFERENCES.md).
+
+Hướng dẫn [chuẩn bị dataset và mutant](docs/PREPARATION_WORKFLOW.md).

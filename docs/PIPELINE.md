@@ -1,4 +1,6 @@
-# Chuẩn bị dữ liệu theo năm bước
+# Các lệnh chuẩn bị dữ liệu
+
+Luồng có đối chiếu public API và tài liệu nằm trong [hướng dẫn chuẩn bị](PREPARATION_WORKFLOW.md).
 
 Chạy từ root repo sau khi cài package trong venv. Ví dụ dùng checkout ở `checkouts/marshmallow` và file project `configs/projects/marshmallow.json`. Mỗi output phải nằm ngoài checkout; dùng output mới khi đổi đầu vào.
 
@@ -55,11 +57,14 @@ python -m specmind_prep scope --repo checkouts/marshmallow --dataset artifacts/m
 
 | File | Nội dung |
 |---|---|
-| scope.json, targets.json | Hàm gốc và target/callee được chọn |
-| trace/ | Bằng chứng gọi hàm |
+| scope.json, targets.json | Mỗi hàm có đúng một target là chính nó; không mở rộng sang callee |
 | summary.json, manifest.json | Tổng hợp, fingerprint và liên kết dataset |
 
+Scope không chạy lại test và không dùng ngưỡng độ dài hàm để chọn callee.
+
 ## 5. Mutants: tạo corpus riêng
+
+Để dùng LLM, xem [sinh mutant theo từng dòng](LLM_LINE_MUTANTS.md). Lệnh bên dưới dành riêng cho mutmut.
 
 ```powershell
 docker build -t specmind-marshmallow-mutmut:latest -f docker/mutmut-worker.Dockerfile --build-arg 'PROJECT_DEPENDENCIES=["simplejson==3.20.2","tzdata==2025.2"]' .
