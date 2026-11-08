@@ -139,3 +139,5 @@ python -m specmind_eval run --config configs/run.local.json --output runs/experi
 Tra cứu vị trí hàm và caller trước khi slicing: [Function references](docs/FUNCTION_REFERENCES.md).
 
 Hướng dẫn [chuẩn bị dataset và mutant](docs/PREPARATION_WORKFLOW.md).
+
+Để chạy bằng venv riêng đã khóa dependency, xem [môi trường ổn định](docs/STABLE_ENVIRONMENT.md).
