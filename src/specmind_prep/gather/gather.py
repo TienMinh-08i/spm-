@@ -81,4 +81,7 @@ def validate_candidates(directory,repo):
             raise ValueError('Candidate artifact mismatch: '+name)
     if manifest['source_environment']!=source_environment(repo):raise ValueError('Candidate source/environment mismatch')
     if manifest['repo_commit']!=revision(repo):raise ValueError('Candidate checkout commit mismatch')
+    if manifest.get('producer') == 'manual-selection-v1':
+        from specmind_prep.selection import validate_selection_artifact
+        validate_selection_artifact(directory, repo, manifest)
     return manifest

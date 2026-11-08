@@ -44,6 +44,11 @@ def build_parser():
     vdocs = sub.add_parser("validate-docs", help="Recheck a docs build manifest and all artifact hashes")
     vdocs.add_argument("--output", type=path, required=True)
     vdocs.add_argument("--expected-commit")
+    selection = sub.add_parser('validate-selection', help='Step 3: validate full manual selection against source/docs')
+    for name in ('repo', 'project', 'docs', 'selection', 'output'):
+        selection.add_argument('--'+name, type=path, required=True)
+    selection.add_argument('--review-id', action='append', default=[])
+    selection.add_argument('--test', action='append')
     refs = sub.add_parser("references", help="Locate a function and inspect static caller references; no execution")
     refs.add_argument("--repo", type=path, required=True)
     refs.add_argument("--project", type=path, required=True)
@@ -154,6 +159,10 @@ def main(argv=None):
             m = validate_docs(args.output, args.expected_commit)
             result = {"docs": "valid", "commit": m["commit"], "files": len(m["files"]),
                       "api_reference": m["paths"]["api_reference"]}
+        elif args.command == 'validate-selection':
+            from specmind_prep.selection import prepare_selection
+            result = prepare_selection(args.repo, args.project, args.docs, args.selection, args.output,
+                                       review_ids=args.review_id, tests=args.test)
         elif args.command == "references":
             from specmind_prep.project import load_project
             from specmind_prep.source_index import source_index
@@ -275,14 +284,15 @@ def main(argv=None):
 
             result = {}
             manifest = None
+            candidate_manifest = link_manifest = scope_manifest = None
             if args.candidates:
                 from specmind_prep.gather.gather import validate_candidates
-                validate_candidates(args.candidates,args.repo)
+                candidate_manifest = validate_candidates(args.candidates,args.repo)
                 result['candidates']='valid'
             if args.links:
                 if not args.candidates:raise ValueError('--links requires --candidates')
                 from specmind_prep.trace.trace import validate_links
-                validate_links(args.links,args.repo,args.candidates)
+                link_manifest = validate_links(args.links,args.repo,args.candidates)
                 result['links']='valid'
             if args.raw:
                 m = check_raw(args.raw)
@@ -291,11 +301,19 @@ def main(argv=None):
                 result["raw"] = "valid"
             if args.dataset:
                 problems, tests, manifest = load_prepared_dataset(args.dataset, args.repo)
+                lineage = manifest.get('lineage') or {}
+                if candidate_manifest and (lineage.get('candidate_fingerprint') != candidate_manifest['fingerprint']
+                                           or lineage.get('candidate_files') != candidate_manifest['files']):
+                    raise ValueError('Dataset does not belong to these candidates')
+                if link_manifest and (lineage.get('link_fingerprint') != link_manifest['fingerprint']
+                                      or lineage.get('link_files') != link_manifest['files']):
+                    raise ValueError('Dataset does not belong to these links')
                 result["dataset"] = {"functions": len(problems), "test_links": sum(map(len, tests.values()))}
             if args.scope:
                 from specmind_prep.scope.scope import load_scope
 
                 rows, targets, m = load_scope(args.scope, args.repo)
+                scope_manifest = m
                 if manifest and (m.get("dataset_fingerprint") != manifest["fingerprint"]
                                  or m.get("dataset_files") != manifest["files"]):
                     raise ValueError("Mutation scope does not belong to this dataset")
@@ -306,6 +324,9 @@ def main(argv=None):
                 if not manifest:
                     raise ValueError("--mutants requires --dataset")
                 rows, m = load_prepared_mutants(args.mutants, args.repo, manifest)
+                if scope_manifest and (m.get('scope_fingerprint') != scope_manifest['fingerprint']
+                                       or m.get('scope_files') != scope_manifest['files']):
+                    raise ValueError('Mutants do not belong to this scope')
                 result["mutants"] = {"functions": len(rows)}
             if not result:
                 raise ValueError("Select --raw, --dataset, --scope or --mutants")

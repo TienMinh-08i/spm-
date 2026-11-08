@@ -18,7 +18,7 @@ from specmind_eval.common.fingerprint import file_hash, source_environment
 from specmind_eval.common.jsonl import write_jsonl
 
 def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
-                    timeout=120, batch_size=500, force=False, project=None, lineage=None):
+                    timeout=120, batch_size=500, force=False, project=None, lineage=None, collection_tests=None):
     problems, tests, repo = (Path(p).resolve() for p in (problems, tests, repo))
     output = separate_output(output, repo, problems.parent, tests.parent)
     if timeout < 0 or batch_size < 1:
@@ -38,7 +38,7 @@ def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
                        'specmind_eval/evaluate/pytest_runner.py', 'specmind_eval/inputs/dataset.py', 'specmind_eval/evaluate/evaluator.py', 'specmind_eval/common/fingerprint.py', 'specmind_eval/common/storage.py', 'specmind_eval/common/jsonl.py', 'specmind_eval/common/outputs.py', 'specmind_eval/inputs/prepared.py')}
     fingerprint = digest({'problems': file_hash(problems), 'tests': file_hash(tests),
                           'candidates': candidates, 'environment': env, 'implementation': implementation,
-                          'timeout': timeout, 'batch_size': batch_size, 'project': project, 'lineage': lineage})
+                          'timeout': timeout, 'batch_size': batch_size, 'project': project, 'lineage': lineage, 'collection_tests': collection_tests})
     with run_lock(output):
         previous = read(output/'manifest.json')
         if previous and not resume:
@@ -48,16 +48,17 @@ def prepare_dataset(problems, tests, repo, output, *, resume=False, tasks=None,
         manifest = {'schema': SCHEMA, 'fingerprint': fingerprint, 'complete': False,
                     'source_environment': env, 'inputs': {'problems': str(problems), 'tests': str(tests), 'repo': str(repo)},
                     'implementation': implementation, 'settings': {'timeout': timeout, 'batch_size': batch_size},
-                    'planned_functions': len(candidates), 'files': {}, 'project': project, 'lineage': lineage}
+                    'planned_functions': len(candidates), 'files': {}, 'project': project, 'lineage': lineage,
+                    'collection_tests': collection_tests}
         write(output/'manifest.json', manifest)
         collection = output/'collection'
         if not previous:
-            prepare_tests(tests, repo, collection, python_path=project.get("python_path") if project else None, test_paths=project.get("tests") if project else None)
+            prepare_tests(tests, repo, collection, python_path=project.get("python_path") if project else None, test_paths=collection_tests if collection_tests is not None else project.get("tests") if project else None)
         if not (collection/'summary.json').exists():
             # Collection may have failed before its checkpoint was created.
             if collection.exists():
                 raise ValueError('Incomplete collection directory; use a new output')
-            prepare_tests(tests, repo, collection, python_path=project.get("python_path") if project else None, test_paths=project.get("tests") if project else None)
+            prepare_tests(tests, repo, collection, python_path=project.get("python_path") if project else None, test_paths=collection_tests if collection_tests is not None else project.get("tests") if project else None)
         linked = {}
         for row in read_jsonl(collection/'tests_valid.jsonl'):
             linked.setdefault(row['problem_id'], {})[pytest_nodeid(row)] = row
@@ -127,5 +128,5 @@ def prepare_linked_dataset(candidates, links, repo, output, **kwargs):
     parent=validate_candidates(candidates,repo)
     link=validate_links(links,repo,candidates)
     return prepare_dataset(candidates/'problems.jsonl',links/'tests.jsonl',repo,output,
-                           project=parent['project'],lineage={'candidate_fingerprint':parent['fingerprint'],
+                           collection_tests=parent.get('test_selection'),project=parent['project'],lineage={'candidate_fingerprint':parent['fingerprint'],
                            'candidate_files':parent['files'],'link_fingerprint':link['fingerprint'],'link_files':link['files']},**kwargs)
