@@ -1,4 +1,5 @@
 """Trace selected tests using only sealed candidate locations."""
+from specmind_eval.common.fingerprint import require_source_environment
 import os
 import subprocess
 import sys
@@ -82,7 +83,7 @@ def validate_links(directory,repo,candidates=None):
     if not isinstance(files,dict) or not REQUIRED.issubset(files):raise ValueError('Manifest missing required artifact hashes')
     for name,value in files.items():
         if Path(name).name!=name or not (directory/name).is_file() or file_hash(directory/name)!=value:raise ValueError('Link artifact mismatch: '+name)
-    if manifest['source_environment']!=source_environment(repo):raise ValueError('Link source/environment mismatch')
+    require_source_environment(manifest['source_environment'], source_environment(repo), 'Link')
     if candidates is not None:
         parent=validate_candidates(candidates,repo)
         if manifest['candidate_fingerprint']!=parent['fingerprint'] or manifest['candidate_files']!=parent['files'] or manifest['project']!=parent['project']:

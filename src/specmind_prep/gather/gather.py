@@ -1,4 +1,5 @@
 """Source-only candidate gathering; never starts target tests or imports target code."""
+from specmind_eval.common.fingerprint import require_source_environment
 import ast
 import subprocess
 from pathlib import Path
@@ -79,7 +80,7 @@ def validate_candidates(directory,repo):
     for name,value in files.items():
         if Path(name).name!=name or not (directory/name).is_file() or file_hash(directory/name)!=value:
             raise ValueError('Candidate artifact mismatch: '+name)
-    if manifest['source_environment']!=source_environment(repo):raise ValueError('Candidate source/environment mismatch')
+    require_source_environment(manifest['source_environment'], source_environment(repo), 'Candidate')
     if manifest['repo_commit']!=revision(repo):raise ValueError('Candidate checkout commit mismatch')
     if manifest.get('producer') == 'manual-selection-v1':
         from specmind_prep.selection import validate_selection_artifact

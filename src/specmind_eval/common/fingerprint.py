@@ -33,6 +33,32 @@ def source_environment(repo):
     return identity
 
 
+
+def require_source_environment(expected, actual, label):
+    """Keep strict identity checks, but explain the cause of a mismatch."""
+    if expected == actual:
+        return
+    from collections import Counter
+    details = []
+    for key in sorted(set(expected) | set(actual)):
+        if expected.get(key) == actual.get(key):
+            continue
+        if key == 'packages':
+            before = Counter(tuple(p) for p in expected.get(key, []))
+            after = Counter(tuple(p) for p in actual.get(key, []))
+            added, removed = list((after-before).elements()), list((before-after).elements())
+            details.append(f'packages added={len(added)}, removed={len(removed)}')
+            for title, values in [('added', added), ('removed', removed)]:
+                if values:
+                    details.append(title + ': ' + ', '.join(n+'=='+v for n,v in values[:5])
+                                   + (' ...' if len(values)>5 else ''))
+        else:
+            details.append(key + ' changed')
+    raise ValueError(label + ' source/environment mismatch: ' + '; '.join(details)
+                     + '. Use the recorded environment or revalidate into a new output; '
+                       'do not edit the original manifest.')
+
+
 def file_hash(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 

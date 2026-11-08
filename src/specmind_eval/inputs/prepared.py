@@ -2,7 +2,7 @@
 from pathlib import Path
 from specmind_eval.inputs.dataset import load
 from specmind_eval.common.storage import read
-from specmind_eval.common.fingerprint import digest, file_hash, source_environment
+from specmind_eval.common.fingerprint import digest, file_hash, source_environment, require_source_environment
 
 SCHEMA = 'prepared-dataset-v1'
 
@@ -16,8 +16,7 @@ def load_prepared_dataset(directory, repo):
     required = {'excluded_functions.json', 'problems.jsonl', 'tests.jsonl', 'summary.json', 'results.json'}
     if not isinstance(manifest.get("files"), dict) or not required.issubset(manifest["files"]):
         raise ValueError("Manifest missing required artifact hashes")
-    if source_environment(repo) != manifest['source_environment']:
-        raise ValueError('Prepared dataset source/environment mismatch')
+    require_source_environment(manifest['source_environment'], source_environment(repo), 'Prepared dataset')
     for name, expected in manifest['files'].items():
         if Path(name).name != name or file_hash(directory/name) != expected:
             raise ValueError('Prepared dataset artifact mismatch: '+name)
@@ -40,8 +39,7 @@ def load_prepared_mutants(output,repo,dataset_manifest):
     required = {'summary.json', 'functions.json', 'targets_input.json'}
     if not isinstance(manifest.get("files"), dict) or not required.issubset(manifest["files"]):
         raise ValueError("Manifest missing required artifact hashes")
-    if manifest['source_environment']!=source_environment(repo):
-        raise ValueError('Prepared mutants source/environment mismatch')
+    require_source_environment(manifest['source_environment'], source_environment(repo), 'Prepared mutants')
     if manifest['dataset_fingerprint']!=dataset_manifest['fingerprint'] or manifest['dataset_files']!=dataset_manifest['files']:
         raise ValueError('Prepared mutants do not belong to this dataset')
     for name,value in manifest['files'].items():

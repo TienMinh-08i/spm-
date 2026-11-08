@@ -1,4 +1,5 @@
 """Offline self-only mutation scope, sealed against a prepared dataset."""
+from specmind_eval.common.fingerprint import require_source_environment
 import ast
 from pathlib import Path
 
@@ -67,8 +68,7 @@ def load_scope(output, repo):
     required = {'scope.json', 'targets.json'}
     if not isinstance(manifest.get("files"), dict) or not required.issubset(manifest["files"]):
         raise ValueError("Manifest missing required artifact hashes")
-    if manifest['source_environment']!=source_environment(repo):
-        raise ValueError('Mutation scope source/environment mismatch')
+    require_source_environment(manifest['source_environment'], source_environment(repo), 'Mutation scope')
     for name, value in manifest['files'].items():
         if Path(name).name!=name or file_hash(output/name)!=value:
             raise ValueError('Mutation scope artifact mismatch')
