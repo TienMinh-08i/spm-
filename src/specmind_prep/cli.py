@@ -34,6 +34,16 @@ def build_parser():
     parser = argparse.ArgumentParser(description="Project preparation stages (no LLM)")
     parser.add_argument("--traceback", action="store_true", help="Show full Python traceback for debugging")
     sub = parser.add_subparsers(dest="command", required=True)
+    docs = sub.add_parser("build-docs", help="Step 0: build HTML docs at project.commit in a separate checkout/venv")
+    docs.add_argument("--project", type=path, required=True, help="Project config with commit, docs_dir, docs_build")
+    docs.add_argument("--source", type=path, required=True, help="Local git repo to clone from (read-only)")
+    docs.add_argument("--workdir", type=path, required=True, help="New directory for build checkout and venv")
+    docs.add_argument("--output", type=path, required=True, help="New artifact directory (html, logs, manifest)")
+    docs.add_argument("--python", help="Base interpreter for the docs venv; default: this Python")
+    docs.add_argument("--timeout", type=int, default=1800, help="Seconds per subprocess step")
+    vdocs = sub.add_parser("validate-docs", help="Recheck a docs build manifest and all artifact hashes")
+    vdocs.add_argument("--output", type=path, required=True)
+    vdocs.add_argument("--expected-commit")
     refs = sub.add_parser("references", help="Locate a function and inspect static caller references; no execution")
     refs.add_argument("--repo", type=path, required=True)
     refs.add_argument("--project", type=path, required=True)
@@ -135,7 +145,16 @@ def main(argv=None):
     try:
         from specmind_eval.common.storage import read
 
-        if args.command == "references":
+        if args.command == "build-docs":
+            from specmind_prep.docs_build import build_docs
+            result = build_docs(args.project, args.source, args.workdir, args.output,
+                                timeout=args.timeout, python=args.python)
+        elif args.command == "validate-docs":
+            from specmind_prep.docs_build import validate_docs
+            m = validate_docs(args.output, args.expected_commit)
+            result = {"docs": "valid", "commit": m["commit"], "files": len(m["files"]),
+                      "api_reference": m["paths"]["api_reference"]}
+        elif args.command == "references":
             from specmind_prep.project import load_project
             from specmind_prep.source_index import source_index
             from specmind_prep.references import references

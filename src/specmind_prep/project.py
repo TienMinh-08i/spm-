@@ -3,7 +3,8 @@ import json
 import re
 from pathlib import Path
 
-KEYS = {"name", "commit", "source_root", "packages", "tests", "python_path", "docs_dir", "dependencies"}
+KEYS = {"name", "commit", "source_root", "packages", "tests", "python_path", "docs_dir", "dependencies",
+        "docs_build"}  # docs_build is validated by specmind_prep.docs_build (Step 0)
 
 def relative_path(repo, value, key):
     if not isinstance(value, str) or not value:

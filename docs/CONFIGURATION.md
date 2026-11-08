@@ -109,5 +109,6 @@ Ví dụ: `configs/projects/marshmallow.json`. Đường dẫn bên trong file p
 | python_path | Các thư mục cần thêm vào PYTHONPATH; mặc định dấu chấm và source_root |
 | docs_dir | Thư mục Sphinx RST; bắt buộc nếu documented_only |
 | dependencies | Yêu cầu pip của target; doctor báo gói thiếu và lệnh cài, không tự cài |
+| docs_build | Cách build tài liệu ở Step 0 (`build-docs`): dependency docs, lệnh cài/build, trang API reference và trang cần kiểm. Xem [Step 0](DOCS_BUILD.md) |
 
 Thông tin project được chép vào manifest và truyền qua các stage. Sửa file project sau đó không sửa artifact đã tạo. Muốn đổi project/settings, dùng output mới. Trace đọc vị trí từ candidates đã niêm phong; không quét lại source để tìm vị trí hàm.
