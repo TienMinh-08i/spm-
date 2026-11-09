@@ -1,7 +1,7 @@
 """Occurrence-based backward dynamic slicing (Agrawal-Horgan Approach 3).
 
 Initial model: one synchronous top-level function, primitive local variables,
-structured if/while, no early exits, declared builtin input/output boundaries.
+structured if/while and top-level return guards, declared builtin I/O boundaries.
 No heap, interprocedural effects, general CFG, forward query or Reduced DDG.
 """
 from collections import Counter
@@ -28,7 +28,8 @@ from specmind_prep.injected.slice_instrumentation import Unsupported, analyze
 from specmind_prep.slice_process import run_bounded
 
 SCHEMA = "dynamic-slice-trace-v1"
-MODEL = "primitive-local-structured-ddg-v1"
+MODEL = "primitive-local-guard-ddg-v2"
+READABLE_MODELS = {"primitive-local-structured-ddg-v1", MODEL}
 PLUGIN = "specmind_prep.injected.slice_trace_plugin"
 
 
@@ -231,7 +232,7 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
         "scope": {
             "kind": "intraprocedural",
             "inputs": "external primitive argument/input() origins",
-            "control": "structured if/while, no early exits",
+            "control": "structured if/while with normalized top-level return guards",
             "heap": False,
             "forward": False,
             "reduced_ddg": False,
@@ -355,7 +356,7 @@ def load_trace(directory, repo):
     manifest = read(directory / "manifest.json")
     if not manifest or manifest.get("schema") != SCHEMA or not manifest.get("complete"):
         raise ValueError("Missing or unfinished dynamic trace artifact")
-    if manifest.get("model") != MODEL:
+    if manifest.get("model") not in READABLE_MODELS:
         raise ValueError("Unsupported dynamic trace model")
     files = manifest.get("files")
     required = {"events.json", "ddg.json", "calls.json", "sites.json", "summary.json"}

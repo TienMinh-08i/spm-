@@ -153,7 +153,7 @@ def test_failing_test_after_criterion_can_still_have_a_valid_trace(tmp_path):
 @pytest.mark.parametrize(
     "source",
     [
-        "def f(x):\n    if x:\n        return 0\n    return x\n",
+        "def f(x):\n    while x:\n        if x:\n            return 0\n    return x\n",
         "def f(x):\n    x[0]=1\n    return x\n",
         "def f(x):\n    return other(x)\n",
         "def f(x):\n    return GLOBAL+x\n",
@@ -474,3 +474,46 @@ def test_reconstructed_function_with_external_globals_is_explicitly_unsupported(
     )
     assert run(repo, project, out)["status"] == "unsupported"
     assert "module-owned" in " ".join(read(out / "summary.json")["issues"])
+
+
+@pytest.mark.parametrize("flag,expected,expected_lines", [(True, 2, {1, 2, 3}), (False, 3, {1, 2, 5, 6})])
+def test_top_level_guard_records_taken_and_false_continuation_dependencies(tmp_path, flag, expected, expected_lines):
+    repo, project, out = fixture(
+        tmp_path,
+        "def f(flag,x):\n    if flag:\n        return x\n    irrelevant=7\n    y=x+1\n    return y\n",
+        f"from demo import f\ndef test_f():\n    assert f({flag},2)=={expected}\n",
+    )
+    assert run(repo, project, out)["status"] == "complete_supported"
+    result = query_slice(out, repo, return_event(out), "$return", when="after")
+    assert lines(result) == expected_lines
+    predicate = next(n for n in result["nodes"] if n["kind"] == "predicate")
+    assert predicate["outcome"] is flag
+    returned = next(n for n in result["nodes"] if n["kind"] == "return")
+    assert returned["controls"] == [predicate["id"]]
+
+
+def test_multiple_guard_occurrences_do_not_merge_across_calls(tmp_path):
+    repo, project, out = fixture(
+        tmp_path,
+        "def f(a,b,x):\n    if a:\n        return 10\n    if b:\n        return 20\n    return x+1\n",
+        "from demo import f\ndef test_f():\n    assert (f(False,False,2),f(False,True,2),f(True,False,2))==(3,20,10)\n",
+    )
+    assert run(repo, project, out)["status"] == "complete_supported"
+    for frame, parameters, predicate_count in [(1, {"a", "b", "x"}, 2), (2, {"a", "b"}, 2), (3, {"a"}, 1)]:
+        result = query_slice(out, repo, return_event(out, frame), "$return", when="after")
+        assert {n["frame"] for n in result["nodes"]} == {frame}
+        assert {n["writes"][0] for n in result["nodes"] if n["kind"] == "parameter"} == parameters
+        assert sum(n["kind"] == "predicate" for n in result["nodes"]) == predicate_count
+
+
+def test_value_before_guard_exit_is_distinct_from_control_of_return(tmp_path):
+    repo, project, out = fixture(
+        tmp_path,
+        "def f(flag,x):\n    y=x+1\n    if flag:\n        return 99\n    return y\n",
+        "from demo import f\ndef test_f():\n    assert f(False,2)==3\n",
+    )
+    assert run(repo, project, out)["status"] == "complete_supported"
+    value = query_slice(out, repo, return_event(out), "y")
+    returned = query_slice(out, repo, return_event(out), "$return", when="after")
+    assert lines(value) == {1, 2}
+    assert lines(returned) == {1, 2, 3, 5}

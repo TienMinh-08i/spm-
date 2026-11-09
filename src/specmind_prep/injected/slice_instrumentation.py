@@ -1,7 +1,7 @@
 """AST instrumentation for an explicit structured, primitive-local subset.
 
-For this subset (no early return/break/continue/exception edges), structured
-predicate nesting agrees with the control-dependence relation used by the paper.
+Top-level guard returns are normalized to explicit else continuations. Other
+early exits/break/continue/exception edges still require a later CFG model.
 """
 import ast
 import builtins
@@ -50,9 +50,25 @@ def analyze(source, function_line, filename):
         body = body[1:]
     if not body or not isinstance(body[-1], ast.Return):
         raise Unsupported("A single final top-level return is required")
-    returns = [n for n in ast.walk(fn) if isinstance(n, ast.Return)]
-    if len(returns) != 1:
-        raise Unsupported("Early or branch return requires general CFG support")
+    # A terminating top-level guard makes its continuation depend on the FALSE
+    # predicate occurrence. Normalize only this proven structured case; merely
+    # accepting arbitrary Return nodes would omit that dependency.
+    continuation = [body[-1]]
+    for statement in reversed(body[:-1]):
+        if any(isinstance(n, ast.Return) for n in ast.walk(statement)):
+            if not (
+                isinstance(statement, ast.If)
+                and not statement.orelse
+                and len(statement.body) == 1
+                and isinstance(statement.body[0], ast.Return)
+            ):
+                raise Unsupported("Only top-level single-return guards are modeled; other early exits require CFG support")
+            guarded = copy.deepcopy(statement)
+            guarded.orelse = continuation
+            continuation = [guarded]
+        else:
+            continuation.insert(0, statement)
+    body = continuation
     for node in ast.walk(fn):
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
             locals_.add(node.id)

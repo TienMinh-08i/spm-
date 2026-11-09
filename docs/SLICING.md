@@ -80,6 +80,9 @@ Output là bằng chứng phụ thuộc, không mặc định là chương trìn
 - Input/return và local variable có kiểu chính xác None, bool, int, finite float hoặc str có giới hạn kích thước.
 - Phép gán tên đơn/nhiều tên cùng giá trị, augmented assignment cho tên cục bộ.
 - if/else, while không có break/continue/else và một return cuối hàm.
+- Thêm guard top-level dạng `if condition: return value` không có else, trước return cuối.
+  Phần tiếp theo được instrument như nhánh else của guard, nên giữ đúng phụ thuộc
+  vào predicate False. Source map vẫn trỏ về code gốc; không ghi lại source checkout.
 - Biểu thức primitive, so sánh, short-circuit và conditional expression; chỉ ghi các read thực sự được đánh giá.
 - Các builtin int/float/bool/str/abs/min/max đúng binding; input() là input origin ở phép gán,
   print positional là output boundary. Không suy ra nguồn bằng cách so hai giá trị bằng nhau.
@@ -87,9 +90,13 @@ Output là bằng chứng phụ thuộc, không mặc định là chương trìn
 - Kiểm tra binding, bytecode/source snapshot, hash artifact và pytest phase.
 
 Chưa hỗ trợ: method/decorator/closure, heap/alias dict/list/attribute, global/nonlocal,
-callee tùy ý, for, exception flow trong hàm, return sớm, break/continue,
+callee tùy ý, for, exception flow trong hàm, return sớm ngoài dạng guard trên, break/continue,
 comprehension, generator/async và code sinh động. Không tự coi lời gọi không rõ là pure.
 Điều khiển bằng nesting chỉ áp dụng cho tập structured đã chấp nhận; chưa có CFG tổng quát.
+
+Trace mới dùng model `primitive-local-guard-ddg-v2`. Loader vẫn đọc model v1 của
+MVP trước vì semantics của subset cũ được giữ nguyên; không đổi nhãn hoặc fingerprint
+artifact cũ. Đây chưa phải mở rộng mọi early exit của Python.
 
 ## 5. Trạng thái
 
