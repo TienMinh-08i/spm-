@@ -1,5 +1,69 @@
-"""Validated read-only occurrence DDG."""
+"""Source preparation and graph validation for the read-only expression model."""
 from collections import Counter
+from pathlib import Path
+import inspect
+
+from specmind_eval.common.fingerprint import file_hash
+from specmind_prep.injected.slice_readonly import analyze, external_sites, OPERATIONS
+from specmind_prep.injected.slice_instrumentation import Unsupported
+
+MODEL = "readonly-expression-ddg-v4"
+PLUGIN = "specmind_prep.injected.slice_readonly_plugin"
+
+
+def prepare(repo, records, test_file):
+    specs, sites = {}, {}
+    for function, record in records.items():
+        if record.get("parent_name") or record.get("async"):
+            raise Unsupported("Read-only selection requires top-level synchronous functions")
+        path = (repo / record["repo_path"]).resolve()
+        if not path.is_relative_to(repo) or path.stat().st_size > 2_000_000:
+            raise Unsupported("Invalid read-only source path or size")
+        source = path.read_bytes().decode("utf-8-sig")
+        names = {
+            name.rsplit(".", 1)[1]: name for name in records if records[name]["module"] == record["module"]
+        }
+        fn, parameter, mapping, calls, _, _ = analyze(source, record["line"], str(path), function, names)
+        if function != record["module"] + "." + fn.name or fn.name != record["entry_point"]:
+            raise Unsupported("Read-only function identity differs from source")
+        bindings = {name: names.get(name, name) for name in calls}
+        if any(value not in records and value not in OPERATIONS for value in bindings.values()):
+            raise Unsupported("Unknown read-only binding")
+        for value in mapping.values():
+            value["file"] = record["repo_path"]
+        sites.update(mapping)
+        specs[function] = dict(
+            source=source,
+            source_file=str(path),
+            source_sha256=file_hash(path),
+            repo_path=record["repo_path"],
+            module=record["module"],
+            entry_point=fn.name,
+            line=fn.lineno,
+            parameter=parameter,
+            parameters=[parameter],
+            bindings=bindings,
+        )
+
+    def visit(name, active):
+        if name in active:
+            raise Unsupported("Recursive read-only helper scope is unsupported")
+        for callee in specs[name]["bindings"].values():
+            if callee in specs:
+                visit(callee, active | {name})
+
+    for name in specs:
+        visit(name, set())
+    external = external_sites(
+        test_file.read_bytes().decode("utf-8-sig"), test_file.relative_to(repo).as_posix()
+    )
+    sites.update(external)
+    trusted = {
+        "inspect_file": str(Path(inspect.__file__).resolve()),
+        "inspect_sha256": file_hash(inspect.__file__),
+    }
+    return specs, sites, external, trusted
+
 
 def build_ddg(events):
     known, definitions, frames, owners, returned, used_args = {}, {}, {}, {}, set(), set()

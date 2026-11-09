@@ -28,12 +28,15 @@ from specmind_prep.project import validate_project
 from specmind_prep.injected.slice_instrumentation import Unsupported, analyze, PURE_CALLS
 from specmind_prep.injected.slice_calls import namespace_sites
 from specmind_prep.slice_process import run_bounded
+from specmind_prep.slice_readonly import MODEL as READONLY_MODEL, PLUGIN as READONLY_PLUGIN
+from specmind_prep.slice_readonly import prepare as prepare_readonly, build_ddg as build_readonly_ddg
 
 SCHEMA = "dynamic-slice-trace-v1"
 MODEL = "primitive-local-guard-ddg-v2"
 READABLE_MODELS = {"primitive-local-structured-ddg-v1", MODEL}
 CALL_MODEL = "primitive-call-boundary-ddg-v3"
 READABLE_MODELS.add(CALL_MODEL)
+READABLE_MODELS.add(READONLY_MODEL)
 PLUGIN = "specmind_prep.injected.slice_trace_plugin"
 
 
@@ -273,7 +276,7 @@ def _execute(config, output, mode, timeout, repo, project):
         "-q",
         "--tb=short",
         "-p",
-        PLUGIN,
+        config.get("plugin", PLUGIN),
         "--rootdir",
         str(repo),
         config["test"],
@@ -303,9 +306,14 @@ def _execute(config, output, mode, timeout, repo, project):
     return payload
 
 
-def trace_function(repo, project, test, target, output, *, timeout=60, max_events=20000, caller=None):
+def trace_function(
+    repo, project, test, target, output, *, timeout=60, max_events=20000, caller=None, readonly_helpers=None
+):
     repo = Path(repo).resolve()
     project = validate_project(project, repo)
+    readonly = readonly_helpers is not None
+    if readonly and caller is not None:
+        raise ValueError("Select caller mode or read-only helper mode, not both")
     output = separate_output(output, repo)
     if type(max_events) is not int or not 1 <= max_events <= 200000:
         raise ValueError("max_events must be between 1 and 200000")
@@ -343,6 +351,13 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
         raise ValueError("Unknown function: " + target)
     if caller is not None and (caller not in index or caller == target):
         raise ValueError("Select a distinct known caller function")
+    if readonly and (
+        not isinstance(readonly_helpers, (list, tuple))
+        or len(readonly_helpers) > 7
+        or any(type(name) is not str or name not in index or name == target for name in readonly_helpers)
+        or len(set(readonly_helpers)) != len(readonly_helpers)
+    ):
+        raise ValueError("Select at most seven distinct known read-only helpers")
     record = index[target]
     path = repo / record["repo_path"]
     raw = path.read_bytes()
@@ -356,7 +371,7 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
     manifest = {
         "schema": SCHEMA,
         "complete": False,
-        "model": CALL_MODEL if caller else MODEL,
+        "model": READONLY_MODEL if readonly else CALL_MODEL if caller else MODEL,
         "repo_commit": commit,
         "project": project,
         "repo": str(repo),
@@ -368,7 +383,9 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
             record["repo_path"]: hashlib.sha256(raw).hexdigest(),
             test_file.relative_to(repo).as_posix(): file_hash(test_file),
         },
-        "implementation": implementation_digest("specmind_prep.slicing", PLUGIN),
+        "implementation": implementation_digest(
+            "specmind_prep.slicing", READONLY_PLUGIN if readonly else PLUGIN
+        ),
         "limits": {"timeout_per_execution": timeout, "max_events": max_events, "max_bytes": 8_000_000},
         "scope": {
             "kind": "intraprocedural",
@@ -379,13 +396,13 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
             "reduced_ddg": False,
         },
     }
-    if caller:
+    if caller or readonly:
         selected = {
             name: {
                 k: index[name].get(k)
                 for k in ("repo_path", "line", "module", "entry_point", "parent_name", "async")
             }
-            for name in (caller, target)
+            for name in ((target, *readonly_helpers) if readonly else (caller, target))
         }
         manifest.update(caller=caller, functions=selected)
         manifest["source_files"].update(
@@ -396,13 +413,31 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
             functions=[caller, target],
             inputs="external selected-caller arguments; explicit actual/formal and return links",
         )
+        if readonly:
+            manifest.update(readonly_helpers=list(readonly_helpers))
+            manifest["scope"].update(
+                kind="readonly-selected-helper-scope",
+                functions=list(selected),
+                inputs="external caller input origin; exact builtin type/identity only",
+                control="observed expression predicates and short-circuit AND/OR",
+                caller_body_traced=False,
+                object_contents_traced=False,
+                trusted_operations=[
+                    "hasattr __iter__/strip",
+                    "isinstance Mapping",
+                    "inspect generator predicates",
+                ],
+            )
     write(output / "manifest.json", manifest)
     status, issues, events, calls, sites = "unsupported", [], [], [], {}
     try:
         if record.get("parent_name") or record.get("async"):
             raise Unsupported("Methods and async functions require a later model")
         functions = None
-        if caller:
+        if readonly:
+            functions, sites, external, trusted = prepare_readonly(repo, selected, test_file)
+            parameters = functions[target]["parameters"]
+        elif caller:
             functions, sites = _call_specs(repo, selected, caller)
             parameters = functions[target]["parameters"]
         else:
@@ -420,7 +455,15 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
             "max_events": max_events,
             "max_bytes": 8_000_000,
         }
-        if caller:
+        if readonly:
+            config.update(
+                functions=functions,
+                external_sites=external,
+                trusted=trusted,
+                test_file=str(test_file),
+                plugin=READONLY_PLUGIN,
+            )
+        elif caller:
             config.update(functions=functions, caller=caller)
         baseline = _execute(config, output, "baseline", timeout, repo, project)
         if baseline.get("timeout") or baseline.get("missing_result"):
@@ -492,9 +535,13 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
     if any(file_hash(repo / name) != h for name, h in manifest["source_files"].items()):
         status = "incomplete"
         issues.append("Selected source/test changed during tracing")
-    graph = build_ddg(events, interprocedural=bool(caller)) if status == "complete_supported" else []
+    graph = (
+        (build_readonly_ddg(events) if readonly else build_ddg(events, interprocedural=bool(caller)))
+        if status == "complete_supported"
+        else []
+    )
     # Source spans are generated by the same source AST, not from executed source rewrites.
-    if not caller:
+    if not caller and not readonly:
         for site in sites.values():
             site["file"] = record["repo_path"]
     write(output / "events.json", events)
@@ -562,7 +609,33 @@ def load_trace(directory, repo):
         raise ValueError("Invalid trace source location")
     sites = read(directory / "sites.json")
     if manifest["trace_status"] == "complete_supported":
-        if manifest["model"] == CALL_MODEL:
+        if manifest["model"] == READONLY_MODEL:
+            records = manifest.get("functions", {})
+            if set(records) != {manifest["function"], *manifest["readonly_helpers"]}:
+                raise ValueError("Invalid read-only function set")
+            if any(r["repo_path"] not in manifest["source_files"] for r in records.values()):
+                raise ValueError("Missing read-only source hash")
+            target_record = records[manifest["function"]]
+            if target_record["repo_path"] != location["file"] or target_record["line"] != location["line"]:
+                raise ValueError("Read-only root location mismatch")
+            test_file = (repo / manifest["test"].split("::", 1)[0]).resolve()
+            if (
+                not test_file.is_relative_to(repo)
+                or test_file.relative_to(repo).as_posix() not in manifest["source_files"]
+            ):
+                raise ValueError("Read-only test source hash is missing")
+            expected_functions, expected_sites, external, trusted = prepare_readonly(repo, records, test_file)
+            for mode in ("baseline", "instrumented"):
+                config = read(directory / (mode + ".config.json"))
+                if (
+                    config.get("functions") != expected_functions
+                    or config.get("external_sites") != external
+                    or config.get("trusted") != trusted
+                    or config.get("plugin") != READONLY_PLUGIN
+                    or config.get("test_file") != str(test_file)
+                ):
+                    raise ValueError("Read-only configuration/source mismatch")
+        elif manifest["model"] == CALL_MODEL:
             records = manifest.get("functions", {})
             if set(records) != {manifest.get("caller"), manifest["function"]}:
                 raise ValueError("Invalid selected caller/target set")
@@ -608,12 +681,17 @@ def load_trace(directory, repo):
         events = read(directory / "events.json")
         if events != observed["events"] or read(directory / "calls.json") != observed["calls"]:
             raise ValueError("Trace data differs from subprocess evidence")
-        if nodes != build_ddg(events, interprocedural=manifest["model"] == CALL_MODEL):
+        rebuilt = (
+            build_readonly_ddg(events)
+            if manifest["model"] == READONLY_MODEL
+            else build_ddg(events, interprocedural=manifest["model"] == CALL_MODEL)
+        )
+        if nodes != rebuilt:
             raise ValueError("DDG differs from recorded execution")
         frames = {c["frame"] for c in observed["calls"]}
         if not frames or frames != {n["frame"] for n in nodes}:
             raise ValueError("DDG invocation/frame evidence mismatch")
-        if manifest["model"] == CALL_MODEL:
+        if manifest["model"] in {CALL_MODEL, READONLY_MODEL}:
             if (
                 len(frames) != len(observed["calls"])
                 or original.get("functions") != list(records)
@@ -653,7 +731,9 @@ def query_slice(trace, repo, event, variable, *, when="before"):
         nodes=sliced["nodes"],
         source_statements=sorted(statements.values(), key=lambda s: (s["file"], s["line"], s["column"])),
         limitations=[
-            "Selected caller/target primitive-local model; caller inputs are external boundaries."
+            "Read-only type/identity scope with trusted operations; caller body and object contents are not sliced."
+            if manifest["model"] == READONLY_MODEL
+            else "Selected caller/target primitive-local model; caller inputs are external boundaries."
             if manifest["model"] == CALL_MODEL
             else "Single function and primitive-local model; caller inputs are external boundaries.",
             "Not an independently executable program or whole-Python semantic slice.",
