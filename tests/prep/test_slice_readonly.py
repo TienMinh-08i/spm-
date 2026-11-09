@@ -376,3 +376,59 @@ def test_external_origin_never_selects_another_call_on_the_same_line():
     assert not any(1 in s["unambiguous_lines"] for s in sites.values())
     sites = external_sites("root(\n    make(1)\n)\n", "tests/test_x.py")
     assert not any(2 in s["unambiguous_lines"] for s in sites.values())
+
+
+def test_readonly_cli_and_return_query(tmp_path, capsys):
+    from specmind_prep.cli import main
+
+    repo, p, out = fixture(
+        tmp_path,
+        "def root(obj):\n    return hasattr(obj,'strip')\n",
+        "from demo import root\ndef test_f():\n    assert root(b'abc') is True\n",
+    )
+    config = tmp_path / "project.json"
+    write(config, p)
+    assert (
+        main(
+            [
+                "slice-trace",
+                "--repo",
+                str(repo),
+                "--project",
+                str(config),
+                "--test",
+                "tests/test_ro.py::test_f",
+                "--target",
+                "demo.root",
+                "--readonly-helpers",
+                "--output",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    call = read(out / "calls.json")[0]
+    query = tmp_path / "slice.json"
+    assert (
+        main(
+            [
+                "slice-call",
+                "--repo",
+                str(repo),
+                "--trace",
+                str(out),
+                "--event",
+                str(call["return_event"]),
+                "--variable",
+                "$return",
+                "--when",
+                "after",
+                "--output",
+                str(query),
+            ]
+        )
+        == 0
+    )
+    assert read(query)["scope"]["object_contents_traced"] is False
+    assert [n["operation"] for n in read(query)["nodes"] if n["kind"] == "operation"] == ["hasattr"]
+    capsys.readouterr()

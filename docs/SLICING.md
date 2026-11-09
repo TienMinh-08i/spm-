@@ -100,6 +100,47 @@ Trace v3 cũ chứa các dạng này cũng bị reader từ chối, không đổ
 Điều kiện nằm trong chính argument như `target(x if flag else y)` vẫn được theo dõi:
 argument event ghi các read thực sự xảy ra, gồm flag và nhánh đã chọn.
 
+### Hàm chỉ đọc object/type và chuỗi helper
+
+`--readonly-helpers` chọn model `readonly-expression-ddg-v4`, tách khỏi model primitive.
+Ví dụ với checkout Marshmallow đúng commit trong project config:
+
+```powershell
+.\run-stable.ps1 prep slice-trace `
+  --repo C:\work\marshmallow --project configs/projects/marshmallow.json `
+  --test 'tests/test_utils.py::test_is_collection' `
+  --target marshmallow.utils.is_collection `
+  --readonly-helpers marshmallow.utils.is_iterable_but_not_string marshmallow.utils.is_generator `
+  --output artifacts/slicing/is-collection
+```
+
+Mỗi hàm được chọn phải top-level đồng bộ, có đúng một parameter không default và một
+return expression sau docstring. Helper trong cùng module phải được chọn tường minh,
+tối đa bảy helper, không đệ quy. Không kết hợp với --caller. Truy vấn dùng slice-call như trên;
+lọc calls.json theo function để chọn đúng return_event của root và dùng '$return' sau event.
+
+Model ghi expression/data edges và predicate cho từng operand and/or thực sự được đánh giá.
+Nguồn đưa vào frame khác với sub-invocation bên trong frame, nên return của helper lồng nhau
+không bị nối nhầm. Đây là mở rộng AST/Python trên nguyên tắc occurrence DDG, không phải RDDG.
+
+- Input exact list/tuple/dict/bytes được ghi bằng type và token trong một root occurrence.
+  Không đọc nội dung container, không giữ object sống lâu hơn lần gọi để cấp token.
+- Chỉ tin cậy lookup hasattr với __iter__/strip, isinstance với Mapping và hai predicate
+  inspect.isgeneratorfunction/isgenerator trên các exact builtin input đã nhận. Kết quả thao tác
+  được lấy từ một lần gọi thật; binding/code, namespace chuẩn và ABC token được kiểm tra.
+  Inspect được biểu diễn bằng operation summary có source hash, không giả vờ trace toàn bộ stdlib.
+- Custom object/subclass, container truth/content reads, mutation, method hoặc protocol khác
+  vẫn unsupported. Hàm được chọn phải trả bool. Đây chưa phải hỗ trợ toàn API is_collection.
+- Caller name/file:line và input trước body được giữ. Khi call site trong test không mơ hồ,
+  source argument được gắn với external_input. Nếu nhiều call lồng/cùng dòng không phân biệt
+  được, giữ origin ở boundary của root; không lấy nhầm argument của call khác.
+- Thân test/fixture và phần tính input trước call chưa được slice. Nội dung object không được
+  snapshot trước/sau; scope và limitations trong JSON nêu rõ các boundary này.
+
+Source projection có thể giữ nguyên cả dòng return chứa and/or, gồm cả đoạn không chạy.
+Xem predicate/call/operation events để phân biệt nhánh đã chạy; không coi fragment đó là
+chương trình độc lập. Trace/query ghi thư mục mới, không thay dataset/mutant hoặc prompt.
+
 ## 3. File và ý nghĩa
 
 | File | Nội dung |
