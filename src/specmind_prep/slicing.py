@@ -33,12 +33,13 @@ READABLE_MODELS = {"primitive-local-structured-ddg-v1", MODEL}
 PLUGIN = "specmind_prep.injected.slice_trace_plugin"
 
 
-def build_ddg(events):
+def build_ddg(events, *, interprocedural=False):
     """Validate causal producer edges and attach dependencies to occurrence nodes."""
     nodes = []
     definitions = {}
     known = {}
     counts = Counter()
+    origins, results, used_arguments, invoked_frames = {}, set(), set(), {}
     for event in events:
         ident = event["id"]
         if type(ident) is not int or ident != len(nodes) + 1:
@@ -51,7 +52,7 @@ def build_ddg(events):
             "return",
             "expression",
             "call",
-        }:
+        } | ({"argument", "invocation", "call_result"} if interprocedural else set()):
             raise ValueError("Unknown DDG event kind")
         frame = event["frame"]
         if type(frame) is not int or frame < 1:
@@ -62,7 +63,8 @@ def build_ddg(events):
         for name, producer in event["reads"].items():
             if state.get(name) != producer:
                 raise ValueError("Read is not linked to the most recent local definition")
-        dependencies = set(event["reads"].values()) | set(event["inputs"]) | set(event["controls"])
+        local = set(event["reads"].values()) | set(event["inputs"]) | set(event["controls"])
+        dependencies = set(local)
         for parent in dependencies:
             if type(parent) is not int or parent not in known or known[parent]["frame"] != frame:
                 raise ValueError("Dependency must reference an earlier event in the same modeled frame")
@@ -70,6 +72,11 @@ def build_ddg(events):
             raise ValueError("Control edge must reference a predicate occurrence")
         if any(known[c]["kind"] != "input" for c in event["inputs"]):
             raise ValueError("Input edge must reference an input occurrence")
+        if interprocedural:
+            _call_dependencies(event, known, origins, results, used_arguments, invoked_frames)
+            dependencies.update(event["links"].values())
+        elif event.get("links"):
+            raise ValueError("Call links require the interprocedural model")
         counts[(frame, event["site"])] += 1
         node = dict(event, occurrence=counts[(frame, event["site"])], depends_on=sorted(dependencies))
         known[ident] = node
@@ -77,6 +84,76 @@ def build_ddg(events):
         for name in event["writes"]:
             state[name] = ident
     return nodes
+
+
+def _call_dependencies(event, known, origins, results, used_arguments, invoked_frames):
+    """Validate explicit call-boundary links; never infer provenance by value."""
+    frame, kind, links = event["frame"], event["kind"], event["links"]
+    if not isinstance(links, dict) or any(
+        not isinstance(role, str)
+        or (role not in {"invocation", "argument", "return"} and not role.startswith("result:"))
+        for role in links
+    ):
+        raise ValueError("Invalid call dependency roles")
+    if not isinstance(event.get("function"), str) or not event["function"]:
+        raise ValueError("Call model requires function identities")
+    for role, parent in links.items():
+        if type(parent) is not int or parent not in known:
+            raise ValueError("Call link must reference an earlier occurrence")
+        expected = (
+            "call_result"
+            if role.startswith("result:")
+            else {"invocation": "invocation", "argument": "argument", "return": "return"}[role]
+        )
+        if known[parent]["kind"] != expected:
+            raise ValueError("Call dependency kind differs from its role")
+    if kind == "invocation":
+        arguments = event.get("arguments")
+        if not isinstance(arguments, dict) or not isinstance(event.get("callee"), str):
+            raise ValueError("Invocation requires explicit argument bindings")
+        for name, parent in arguments.items():
+            if not isinstance(name, str) or type(parent) is not int or parent not in known:
+                raise ValueError("Invalid argument occurrence")
+            if known[parent]["kind"] != "argument" or known[parent]["frame"] != frame:
+                raise ValueError("Invocation argument belongs to another frame")
+            if parent in used_arguments or not known[parent]["site"].startswith(event["site"] + ":arg:"):
+                raise ValueError("Argument belongs to a different invocation occurrence")
+        if len(set(arguments.values())) != len(arguments):
+            raise ValueError("Argument occurrences cannot be shared across parameter bindings")
+        used_arguments.update(arguments.values())
+    invocation = links.get("invocation")
+    external = invocation is not None and known[invocation]["frame"] != frame
+    if external:
+        if known[invocation]["callee"] != event["function"]:
+            raise ValueError("Invocation callee identity differs from frame")
+        if invocation in invoked_frames and invoked_frames[invocation] != frame:
+            raise ValueError("Invocation belongs to a different callee frame")
+        invoked_frames[invocation] = frame
+    elif invocation is not None and kind != "call_result":
+        raise ValueError("Only a return bridge can consume a same-frame invocation")
+    origin = invocation if external else None
+    if frame in origins and origins[frame] != origin:
+        raise ValueError("Missing or changed frame invocation boundary")
+    origins[frame] = origin
+    if "argument" in links:
+        if kind != "parameter" or not external or len(event["writes"]) != 1:
+            raise ValueError("Argument link requires a callee parameter")
+        if known[invocation]["arguments"].get(event["writes"][0]) != links["argument"]:
+            raise ValueError("Parameter is linked to the wrong actual argument")
+    elif kind == "parameter" and external:
+        raise ValueError("Callee parameter is missing its argument source")
+    if "return" in links:
+        returned = known[links["return"]]
+        if kind != "call_result" or invocation is None or known[invocation]["frame"] != frame:
+            raise ValueError("Return bridge requires its caller invocation")
+        if returned["links"].get("invocation") != invocation or invocation in results:
+            raise ValueError("Return belongs to another or already consumed invocation")
+        results.add(invocation)
+    elif kind == "call_result":
+        raise ValueError("Call result is missing its return source")
+    for role, parent in links.items():
+        if role.startswith("result:") and (role != f"result:{parent}" or known[parent]["frame"] != frame):
+            raise ValueError("Call result must be consumed in its caller frame")
 
 
 def backward_slice(nodes, event_id, variable, when="before"):
