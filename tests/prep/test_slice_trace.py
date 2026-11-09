@@ -215,6 +215,19 @@ def test_timeout_is_explicit_and_artifact_is_finalized(tmp_path):
     assert load_trace(out, repo)[2]["trace_status"] == "incomplete"
 
 
+@pytest.mark.parametrize("timeout", [float("nan"), float("inf"), -float("inf"), 0, -1, True, "60", 10**1000])
+def test_invalid_timeout_is_rejected_before_execution_or_output(tmp_path, monkeypatch, timeout):
+    repo, project, out = fixture(tmp_path, "def f():\n    return 1\n", "def test_f():\n    pass\n")
+
+    def unexpected_execution(*args, **kwargs):
+        pytest.fail("Invalid timeout must not reach subprocess execution")
+
+    monkeypatch.setattr("specmind_prep.slicing._execute", unexpected_execution)
+    with pytest.raises(ValueError, match="positive finite timeout"):
+        run(repo, project, out, timeout=timeout)
+    assert not out.exists()
+
+
 def test_no_target_call_and_exact_parametrized_test_selection(tmp_path):
     repo, project, out = fixture(tmp_path, "def f(x):\n    return x\n", "def test_f():\n    assert True\n")
     assert run(repo, project, out)["status"] == "criterion_not_reached"

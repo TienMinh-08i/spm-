@@ -8,6 +8,7 @@ from collections import Counter
 from pathlib import Path
 import os
 import hashlib
+import math
 import subprocess
 import sys
 
@@ -165,8 +166,14 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
     output = separate_output(output, repo)
     if type(max_events) is not int or not 1 <= max_events <= 200000:
         raise ValueError("max_events must be between 1 and 200000")
-    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
-        raise ValueError("Positive timeout required")
+    if type(timeout) not in (int, float):
+        raise ValueError("A positive finite timeout is required")
+    try:
+        timeout = float(timeout)
+    except OverflowError as exc:
+        raise ValueError("A positive finite timeout is required") from exc
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError("A positive finite timeout is required")
     if not isinstance(test, str) or "::" not in test or test.startswith("-"):
         raise ValueError("An exact pytest nodeid is required")
     test_file = (repo / test.split("::", 1)[0]).resolve()
