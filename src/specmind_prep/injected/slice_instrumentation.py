@@ -16,7 +16,7 @@ class Unsupported(ValueError):
     pass
 
 
-def analyze(source, function_line, filename):
+def analyze(source, function_line, filename, *, call_names=()):
     tree = ast.parse(source, filename=filename)
     matches = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.lineno == function_line]
     if len(matches) != 1:
@@ -62,7 +62,9 @@ def analyze(source, function_line, filename):
                 and len(statement.body) == 1
                 and isinstance(statement.body[0], ast.Return)
             ):
-                raise Unsupported("Only top-level single-return guards are modeled; other early exits require CFG support")
+                raise Unsupported(
+                    "Only top-level single-return guards are modeled; other early exits require CFG support"
+                )
             guarded = copy.deepcopy(statement)
             guarded.orelse = continuation
             continuation = [guarded]
@@ -75,6 +77,7 @@ def analyze(source, function_line, filename):
     if locals_ & (PURE_CALLS | {"input", "print"}):
         raise Unsupported("Shadowed builtin operation")
     used_calls = set()
+    owner_site = None
 
     def expression(node, input_allowed=False, print_allowed=False):
         if node is None:
@@ -105,7 +108,38 @@ def analyze(source, function_line, filename):
             if not isinstance(node.func, ast.Name) or any(isinstance(a, ast.Starred) for a in node.args):
                 raise Unsupported("Method/dynamic/starred call is not modeled")
             name = node.func.id
-            if name == "input":
+            if name in call_names:
+                if any(k.arg is None for k in node.keywords):
+                    raise Unsupported("Unpacked call arguments are not modeled")
+                site = f"{node.lineno}:{node.col_offset}:invoke"
+                sites[site] = {
+                    "file": filename,
+                    "line": node.lineno,
+                    "column": node.col_offset + 1,
+                    "source": ast.get_source_segment(source, node),
+                    "kind": "invocation",
+                    "statement": owner_site,
+                }
+                values = [(str(i), a) for i, a in enumerate(node.args)] + [
+                    ("kw:" + k.arg, k.value) for k in node.keywords
+                ]
+                for key, argument in values:
+                    if any(
+                        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in call_names
+                        for n in ast.walk(argument)
+                    ):
+                        raise Unsupported("Nested traced calls inside actual arguments require a later model")
+                    sites[site + ":arg:" + key] = {
+                        "file": filename,
+                        "line": argument.lineno,
+                        "column": argument.col_offset + 1,
+                        "source": ast.get_source_segment(source, argument),
+                        "kind": "argument",
+                        "statement": owner_site,
+                    }
+                    expression(argument)
+                return
+            elif name == "input":
                 if not input_allowed or node.args or node.keywords:
                     raise Unsupported("input() is allowed only as an explicit assignment input origin")
             elif name == "print":
@@ -120,8 +154,10 @@ def analyze(source, function_line, filename):
             raise Unsupported("Unmodeled expression: " + type(node).__name__)
 
     def statements(items):
+        nonlocal owner_site
         for node in items:
             site = f"{node.lineno}:{node.col_offset}:{type(node).__name__}"
+            owner_site = site
             fragment = ast.get_source_segment(source, node)
             if isinstance(node, (ast.If, ast.While)):
                 fragment = ("if " if isinstance(node, ast.If) else "while ") + ast.unparse(node.test) + ":"
@@ -179,8 +215,8 @@ def analyze(source, function_line, filename):
     return fn, body, args, sites, used_calls
 
 
-def instrument(source, function_line, filename, globals_, *, future_flags=0):
-    fn, body, args, sites, calls = analyze(source, function_line, filename)
+def instrument(source, function_line, filename, globals_, *, future_flags=0, call_names=(), function_id=None):
+    fn, body, args, sites, calls = analyze(source, function_line, filename, call_names=call_names)
     for name in calls:
         if name in globals_ and globals_[name] is not getattr(builtins, name):
             raise Unsupported("Global builtin binding is shadowed: " + name)
@@ -206,6 +242,30 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0):
             return node
 
         def visit_Call(self, node):
+            if node.func.id in call_names:
+                site = f"{node.lineno}:{node.col_offset}:invoke"
+
+                def argument(value, key):
+                    prepared = ast.Subscript(
+                        ast.Tuple([invoke("argument_begin", frame()), self.visit(value)], ast.Load()),
+                        const(1),
+                        ast.Load(),
+                    )
+                    return locate(
+                        invoke("argument_value", frame(), const(site + ":arg:" + key), prepared), value
+                    )
+
+                positional = ast.Tuple([argument(a, str(i)) for i, a in enumerate(node.args)], ast.Load())
+                keywords = ast.Dict(
+                    [const(k.arg) for k in node.keywords],
+                    [argument(k.value, "kw:" + k.arg) for k in node.keywords],
+                )
+                return locate(
+                    invoke(
+                        "call_target", frame(), const(site), copy.deepcopy(node.func), positional, keywords
+                    ),
+                    node,
+                )
             new = copy.deepcopy(node)
             arguments = [self.visit(a) for a in node.args]
             new = locate(
@@ -300,9 +360,12 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0):
     new.args.kw_defaults = [None for _ in new.args.kwonlyargs]
     for arg in (*new.args.posonlyargs, *new.args.args, *new.args.kwonlyargs):
         arg.annotation = None
+    enter_arguments = [ast.Dict([const(n) for n in args], [ast.Name(n, ast.Load()) for n in args])]
+    if function_id is not None:
+        enter_arguments.append(const(function_id))
     enter = ast.Assign(
         [ast.Name(FRAME, ast.Store())],
-        invoke("enter", ast.Dict([const(n) for n in args], [ast.Name(n, ast.Load()) for n in args])),
+        invoke("enter", *enter_arguments),
     )
     handler = ast.ExceptHandler(None, None, [action("raised", fn, frame()), locate(ast.Raise(), fn)])
     wrapped = ast.Try(rewrite(body), [locate(handler, fn)], [], [action("leave", fn, frame())])

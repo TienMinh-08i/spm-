@@ -9,6 +9,7 @@ from pathlib import Path
 import os
 import hashlib
 import math
+import ast
 import subprocess
 import sys
 
@@ -24,12 +25,15 @@ from specmind_eval.common.storage import read, write
 from specmind_prep.source_index import source_index
 from specmind_prep.gather.gather import revision
 from specmind_prep.project import validate_project
-from specmind_prep.injected.slice_instrumentation import Unsupported, analyze
+from specmind_prep.injected.slice_instrumentation import Unsupported, analyze, PURE_CALLS
+from specmind_prep.injected.slice_calls import namespace_sites
 from specmind_prep.slice_process import run_bounded
 
 SCHEMA = "dynamic-slice-trace-v1"
 MODEL = "primitive-local-guard-ddg-v2"
 READABLE_MODELS = {"primitive-local-structured-ddg-v1", MODEL}
+CALL_MODEL = "primitive-call-boundary-ddg-v3"
+READABLE_MODELS.add(CALL_MODEL)
 PLUGIN = "specmind_prep.injected.slice_trace_plugin"
 
 
@@ -192,7 +196,60 @@ def backward_slice(nodes, event_id, variable, when="before"):
 
 def _snapshot_calls(payload):
     source = payload["baseline_calls"] if payload["mode"] == "baseline" else payload["calls"]
-    return [{k: c[k] for k in ("arguments", "returned", "return", "phase")} for c in source]
+    fields = ("arguments", "returned", "return", "phase") + (
+        ("function",) if payload.get("functions") else ()
+    )
+    return [{k: c[k] for k in fields} for c in source]
+
+
+def _call_specs(repo, records, caller):
+    """Pure source preparation, also used to verify a sealed multi-function map."""
+    specs, sites = {}, {}
+    for name, record in records.items():
+        if record.get("parent_name") or record.get("async"):
+            raise Unsupported("Selected caller and target must be top-level synchronous functions")
+        path = (repo / record["repo_path"]).resolve()
+        if not path.is_relative_to(repo) or path.stat().st_size > 2_000_000:
+            raise Unsupported("Invalid or oversized selected source")
+        source = path.read_bytes().decode("utf-8-sig")
+        nodes = [
+            n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.lineno == record["line"]
+        ]
+        if (
+            len(nodes) != 1
+            or nodes[0].name != record["entry_point"]
+            or name != record["module"] + "." + record["entry_point"]
+        ):
+            raise Unsupported("Selected function identity differs from its source")
+        call_names = (
+            sorted(
+                {
+                    n.func.id
+                    for n in ast.walk(nodes[0])
+                    if isinstance(n, ast.Call)
+                    and isinstance(n.func, ast.Name)
+                    and n.func.id not in PURE_CALLS | {"input", "print"}
+                }
+            )
+            if name == caller
+            else []
+        )
+        fn, _, parameters, mapping, _ = analyze(source, record["line"], str(path), call_names=call_names)
+        specs[name] = {
+            "source": source,
+            "source_file": str(path),
+            "repo_path": record["repo_path"],
+            "source_sha256": file_hash(path),
+            "module": record["module"],
+            "line": record["line"],
+            "entry_point": record["entry_point"],
+            "parameters": parameters,
+            "call_names": call_names,
+            "positional": [a.arg for a in (*fn.args.posonlyargs, *fn.args.args)],
+            "posonly": [a.arg for a in fn.args.posonlyargs],
+        }
+        sites.update(namespace_sites(name, mapping, record["repo_path"]))
+    return specs, sites
 
 
 def _execute(config, output, mode, timeout, repo, project):
@@ -223,8 +280,13 @@ def _execute(config, output, mode, timeout, repo, project):
     ]
     log_path = output / (mode + ".log")
     execution = run_bounded(
-        command, cwd=repo, env=env, log_path=log_path, result_path=config["result"],
-        timeout=timeout, max_bytes=config["max_bytes"],
+        command,
+        cwd=repo,
+        env=env,
+        log_path=log_path,
+        result_path=config["result"],
+        timeout=timeout,
+        max_bytes=config["max_bytes"],
     )
     if execution.get("timeout"):
         return dict(execution, mode=mode)
@@ -241,7 +303,7 @@ def _execute(config, output, mode, timeout, repo, project):
     return payload
 
 
-def trace_function(repo, project, test, target, output, *, timeout=60, max_events=20000):
+def trace_function(repo, project, test, target, output, *, timeout=60, max_events=20000, caller=None):
     repo = Path(repo).resolve()
     project = validate_project(project, repo)
     output = separate_output(output, repo)
@@ -279,6 +341,8 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
     index, _ = source_index(repo, project)
     if target not in index:
         raise ValueError("Unknown function: " + target)
+    if caller is not None and (caller not in index or caller == target):
+        raise ValueError("Select a distinct known caller function")
     record = index[target]
     path = repo / record["repo_path"]
     raw = path.read_bytes()
@@ -292,7 +356,7 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
     manifest = {
         "schema": SCHEMA,
         "complete": False,
-        "model": MODEL,
+        "model": CALL_MODEL if caller else MODEL,
         "repo_commit": commit,
         "project": project,
         "repo": str(repo),
@@ -315,12 +379,34 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
             "reduced_ddg": False,
         },
     }
+    if caller:
+        selected = {
+            name: {
+                k: index[name].get(k)
+                for k in ("repo_path", "line", "module", "entry_point", "parent_name", "async")
+            }
+            for name in (caller, target)
+        }
+        manifest.update(caller=caller, functions=selected)
+        manifest["source_files"].update(
+            {r["repo_path"]: file_hash(repo / r["repo_path"]) for r in selected.values()}
+        )
+        manifest["scope"].update(
+            kind="selected-caller-target",
+            functions=[caller, target],
+            inputs="external selected-caller arguments; explicit actual/formal and return links",
+        )
     write(output / "manifest.json", manifest)
     status, issues, events, calls, sites = "unsupported", [], [], [], {}
     try:
         if record.get("parent_name") or record.get("async"):
             raise Unsupported("Methods and async functions require a later model")
-        _, _, parameters, sites, _ = analyze(source, record["line"], str(path))
+        functions = None
+        if caller:
+            functions, sites = _call_specs(repo, selected, caller)
+            parameters = functions[target]["parameters"]
+        else:
+            _, _, parameters, sites, _ = analyze(source, record["line"], str(path))
         config = {
             "source": source,
             "source_file": str(path),
@@ -334,11 +420,16 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
             "max_events": max_events,
             "max_bytes": 8_000_000,
         }
+        if caller:
+            config.update(functions=functions, caller=caller)
         baseline = _execute(config, output, "baseline", timeout, repo, project)
         if baseline.get("timeout") or baseline.get("missing_result"):
             status = "incomplete"
-            issues = ["Baseline output budget exceeded" if baseline.get("output_budget_exceeded") else
-                      "Baseline execution timed out or did not finalize"]
+            issues = [
+                "Baseline output budget exceeded"
+                if baseline.get("output_budget_exceeded")
+                else "Baseline execution timed out or did not finalize"
+            ]
         elif baseline.get("baseline_limited"):
             status = "incomplete"
             issues = ["Baseline call budget exceeded"]
@@ -356,8 +447,11 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
                 or instrumented.get("limited")
             ):
                 status = "incomplete"
-                issues = ["Instrumented output budget exceeded" if instrumented.get("output_budget_exceeded") else
-                          "Instrumented execution incomplete or event budget exceeded"]
+                issues = [
+                    "Instrumented output budget exceeded"
+                    if instrumented.get("output_budget_exceeded")
+                    else "Instrumented execution incomplete or event budget exceeded"
+                ]
             elif instrumented.get("errors") or instrumented.get("issues"):
                 status = "unsupported"
                 issues = instrumented.get("errors", []) + instrumented.get("issues", [])
@@ -371,7 +465,7 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
             ):
                 status = "instrumentation_changed_behavior"
                 issues = ["Observed calls, returns, output or pytest outcomes differ"]
-            elif not instrumented["calls"]:
+            elif not any(c.get("function", target) == target for c in instrumented["calls"]):
                 status = "criterion_not_reached"
                 issues = ["Selected test did not call the function"]
             else:
@@ -398,10 +492,11 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
     if any(file_hash(repo / name) != h for name, h in manifest["source_files"].items()):
         status = "incomplete"
         issues.append("Selected source/test changed during tracing")
-    graph = build_ddg(events) if status == "complete_supported" else []
+    graph = build_ddg(events, interprocedural=bool(caller)) if status == "complete_supported" else []
     # Source spans are generated by the same source AST, not from executed source rewrites.
-    for site in sites.values():
-        site["file"] = record["repo_path"]
+    if not caller:
+        for site in sites.values():
+            site["file"] = record["repo_path"]
     write(output / "events.json", events)
     write(output / "ddg.json", graph)
     write(output / "calls.json", calls)
@@ -413,7 +508,7 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
         "test": test,
         "calls": len(calls),
         "events": len(events),
-        "model": MODEL,
+        "model": manifest["model"],
         "output": str(output),
     }
     write(output / "summary.json", summary)
@@ -467,11 +562,29 @@ def load_trace(directory, repo):
         raise ValueError("Invalid trace source location")
     sites = read(directory / "sites.json")
     if manifest["trace_status"] == "complete_supported":
-        _, _, _, expected_sites, _ = analyze(
-            selected.read_bytes().decode("utf-8-sig"), location["line"], str(selected)
-        )
-        for site in expected_sites.values():
-            site["file"] = location["file"]
+        if manifest["model"] == CALL_MODEL:
+            records = manifest.get("functions", {})
+            if set(records) != {manifest.get("caller"), manifest["function"]}:
+                raise ValueError("Invalid selected caller/target set")
+            if any(r["repo_path"] not in manifest["source_files"] for r in records.values()):
+                raise ValueError("Selected function source is missing from trace hashes")
+            target = records[manifest["function"]]
+            if target["repo_path"] != location["file"] or target["line"] != location["line"]:
+                raise ValueError("Target location differs from the selected function set")
+            expected_functions, expected_sites = _call_specs(repo, records, manifest["caller"])
+            for mode in ("baseline", "instrumented"):
+                config = read(directory / (mode + ".config.json"))
+                if (
+                    config.get("functions") != expected_functions
+                    or config.get("caller") != manifest["caller"]
+                ):
+                    raise ValueError("Call configuration differs from selected source functions")
+        else:
+            _, _, _, expected_sites, _ = analyze(
+                selected.read_bytes().decode("utf-8-sig"), location["line"], str(selected)
+            )
+            for site in expected_sites.values():
+                site["file"] = location["file"]
         if sites != expected_sites:
             raise ValueError("Trace source map differs from original source AST")
     nodes = read(directory / "ddg.json")
@@ -495,11 +608,21 @@ def load_trace(directory, repo):
         events = read(directory / "events.json")
         if events != observed["events"] or read(directory / "calls.json") != observed["calls"]:
             raise ValueError("Trace data differs from subprocess evidence")
-        if nodes != build_ddg(events):
+        if nodes != build_ddg(events, interprocedural=manifest["model"] == CALL_MODEL):
             raise ValueError("DDG differs from recorded execution")
         frames = {c["frame"] for c in observed["calls"]}
         if not frames or frames != {n["frame"] for n in nodes}:
             raise ValueError("DDG invocation/frame evidence mismatch")
+        if manifest["model"] == CALL_MODEL:
+            if (
+                len(frames) != len(observed["calls"])
+                or original.get("functions") != list(records)
+                or observed.get("functions") != list(records)
+            ):
+                raise ValueError("Selected function/invocation evidence mismatch")
+            for call in observed["calls"]:
+                if {n["function"] for n in nodes if n["frame"] == call["frame"]} != {call["function"]}:
+                    raise ValueError("Frame function identity differs from recorded calls")
     return nodes, read(directory / "sites.json"), manifest
 
 
@@ -530,7 +653,9 @@ def query_slice(trace, repo, event, variable, *, when="before"):
         nodes=sliced["nodes"],
         source_statements=sorted(statements.values(), key=lambda s: (s["file"], s["line"], s["column"])),
         limitations=[
-            "Single function and primitive-local model; caller inputs are external boundaries.",
+            "Selected caller/target primitive-local model; caller inputs are external boundaries."
+            if manifest["model"] == CALL_MODEL
+            else "Single function and primitive-local model; caller inputs are external boundaries.",
             "Not an independently executable program or whole-Python semantic slice.",
         ],
     )

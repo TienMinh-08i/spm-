@@ -57,7 +57,9 @@ class Recorder:
             self.issue(str(exc))
             return {"type": "unmodeled"}
 
-    def emit(self, frame, site, kind, reads=None, inputs=(), writes=(), values=None):
+    def emit(
+        self, frame, site, kind, reads=None, inputs=(), writes=(), values=None, *, links=None, details=None
+    ):
         if len(self.events) >= self.config["max_events"]:
             self.limited = True
             raise TraceLimit("Dynamic slicing event budget exceeded")
@@ -74,6 +76,10 @@ class Recorder:
             "writes": list(writes),
             "values": values or {},
         }
+        if links is not None:
+            event["links"] = dict(links)
+        if details:
+            event.update(details)
         size = len(json.dumps(event, ensure_ascii=True).encode("utf-8"))
         if self.encoded_bytes + size > self.config.get("max_bytes", 8_000_000):
             self.limited = True
