@@ -13,7 +13,7 @@ class TraceLimit(RuntimeError):
 
 def primitive(value):
     """Do not invoke user repr, equality, properties, or serialization hooks."""
-    if type(value) not in (type(None), bool, int, float, str):
+    if not any(type(value) is allowed for allowed in (type(None), bool, int, float, str)):
         raise ValueError("Only exact None/bool/int/finite float/str values are modeled")
     if type(value) is float and not math.isfinite(value):
         raise ValueError("Non-finite float is outside this initial model")
