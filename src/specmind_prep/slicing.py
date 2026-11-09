@@ -1,8 +1,8 @@
 """Occurrence-based backward dynamic slicing (Agrawal-Horgan Approach 3).
 
-Initial model: one synchronous top-level function, primitive local variables,
-structured if/while and top-level return guards, declared builtin I/O boundaries.
-No heap, interprocedural effects, general CFG, forward query or Reduced DDG.
+Primitive locals, structured if/while and top-level return guards. Optionally
+link one selected caller/target via explicit actual/formal and return events.
+No heap, arbitrary callee effects, general CFG, forward query or Reduced DDG.
 """
 from collections import Counter
 from pathlib import Path

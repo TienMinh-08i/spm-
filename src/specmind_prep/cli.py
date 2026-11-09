@@ -39,6 +39,7 @@ def build_parser():
         tracing.add_argument("--" + name, type=path, required=True)
     tracing.add_argument("--test", required=True, help="Exact pytest nodeid, including parametrization")
     tracing.add_argument("--target", required=True, help="Top-level function ID; initial primitive-local model")
+    tracing.add_argument("--caller", help="Optional selected top-level package caller; primitive actual/formal links")
     tracing.add_argument("--timeout", type=float, default=60)
     tracing.add_argument("--max-events", type=int, default=20000)
     slicing = sub.add_parser("slice-call", help="Backward variable query on an existing occurrence-based DDG")
@@ -185,6 +186,7 @@ def main(argv=None):
                 args.output,
                 timeout=args.timeout,
                 max_events=args.max_events,
+                caller=args.caller,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["status"] == "complete_supported" else 2

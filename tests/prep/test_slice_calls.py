@@ -1,4 +1,5 @@
 """Caller/target provenance oracles; no dataset or LLM execution."""
+import json
 
 import pytest
 
@@ -166,3 +167,59 @@ def test_changed_callable_binding_is_not_silently_linked_to_old_target(tmp_path)
         "import demo\ndef test_f():\n    demo.target=lambda x: x\n    assert demo.caller()==1\n",
     )
     assert run(repo, project, out)["status"] == "unsupported"
+
+
+def test_cli_selected_caller_and_target_input_query(tmp_path, capsys):
+    from specmind_prep.cli import main
+
+    repo, project, out = fixture(
+        tmp_path,
+        "def target(x):\n    return x+1\ndef caller():\n    seed=3\n    return target(seed)\n",
+        "from demo import caller\ndef test_f():\n    assert caller()==4\n",
+    )
+    config = tmp_path / "project.json"
+    config.write_text(json.dumps(project), encoding="utf-8")
+    assert (
+        main(
+            [
+                "slice-trace",
+                "--repo",
+                str(repo),
+                "--project",
+                str(config),
+                "--test",
+                "tests/test_calls.py::test_f",
+                "--target",
+                "demo.target",
+                "--caller",
+                "demo.caller",
+                "--output",
+                str(out),
+            ]
+        )
+        == 0
+    )
+    call = next(c for c in read(out / "calls.json") if c["function"] == "demo.target")
+    result_path = tmp_path / "target-input.json"
+    assert (
+        main(
+            [
+                "slice-call",
+                "--repo",
+                str(repo),
+                "--trace",
+                str(out),
+                "--event",
+                str(call["event"]),
+                "--variable",
+                "x",
+                "--when",
+                "before",
+                "--output",
+                str(result_path),
+            ]
+        )
+        == 0
+    )
+    assert {s["line"] for s in read(result_path)["source_statements"]} == {1, 4, 5}
+    capsys.readouterr()

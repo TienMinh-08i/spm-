@@ -4,9 +4,9 @@ Triển khai mốc đầu của Approach 3 (Dynamic Dependence Graph) trong
 [Dynamic Program Slicing — Agrawal và Horgan, 1990](https://doi.org/10.1145/93542.93576).
 Mỗi lần chạy câu lệnh là một node riêng; không trộn các vòng lặp chỉ vì cùng file:line.
 
-Hiện hỗ trợ một hàm top-level đồng bộ, biến cục bộ primitive và điều khiển có cấu trúc.
-Đây chưa phải slicing liên hàm/heap cho toàn Python. Các input từ caller là boundary;
-chưa lần ngược các câu lệnh trong caller để tạo context và chưa thay đổi prompt evaluator.
+Mặc định hỗ trợ một hàm top-level đồng bộ, biến cục bộ primitive và điều khiển có cấu trúc.
+Có thể chọn thêm một caller bằng --caller để lần ngược nguồn argument và return qua lời gọi.
+Đây chưa phải slicing liên hàm/heap cho toàn Python và chưa thay đổi prompt evaluator.
 
 ## 1. Thu trace cho đúng một test
 
@@ -57,6 +57,39 @@ tại return_event. Dấu nháy đơn cần thiết trong PowerShell để khôn
 Truy vấn chỉ đọc trace, không chạy lại test. Output phải là file mới ngoài checkout và ngoài thư mục trace.
 Không có fallback về thuật toán tĩnh trước đây và không tự chọn occurrence khi thiếu `--event`.
 Forward và Reduced DDG chưa được triển khai; `--direction` hiện chỉ nhận backward.
+
+### Theo dõi nguồn đối số trong một caller được chọn
+
+Thêm `--caller` để instrument cả một caller top-level trong package và target:
+
+```powershell
+.\run-stable.ps1 prep slice-trace `
+  --repo C:\work\project --project configs/projects/my-project.json `
+  --test 'tests/test_example.py::test_compute' `
+  --caller demo.prepare_and_compute --target demo.compute `
+  --output artifacts/slicing/caller-compute
+```
+
+Model `primitive-call-boundary-ddg-v3` ghi từng actual argument riêng, binding sang
+parameter theo tên và nối return qua event call_result về caller. Không suy nguồn bằng
+giá trị bằng nhau; một argument không được target dùng không tự bị kéo vào slice.
+Invocation giữ phụ thuộc điều khiển ở vị trí gọi mà không kéo toàn bộ argument vào kết quả.
+Đây là phần mở rộng cho Python/SpecMind trên nguyên tắc DDG theo occurrence, không phải
+một thuật toán liên hàm riêng được paper này trình bày.
+
+Trong calls.json, lọc theo `function` để chọn caller hay target, xem `parent_frame`,
+`invocation`, caller name/file:line và event. Để lần ngược nguồn input của target,
+chọn `event` lúc vào target, `--variable <parameter>` và `--when before`.
+Để lần ngược kết quả về caller, chọn return_event của caller và `--variable '$return' --when after`.
+
+Phạm vi: đúng một caller + một target top-level đồng bộ đã chỉ định, trong source package;
+global import alias được xác minh bằng runtime function identity. Cung cấp tường minh
+mọi parameter của target, positional/keyword hợp lệ; chưa theo nguồn default bị lược bỏ,
+`*args/**kwargs`, method, heap, recursion, hoặc traced call lồng trong actual argument.
+Caller từ test/fixture hiện là boundary bên ngoài; chưa tự instrument thân test/fixture
+hay caller-of-caller. Target bị gọi bên ngoài caller đã chọn được báo unsupported.
+Caller chạy nhưng không gọi target cho criterion_not_reached.
+Các giới hạn primitive/control flow hiện tại vẫn áp dụng. Không có --caller thì giữ model v2.
 
 ## 3. File và ý nghĩa
 
