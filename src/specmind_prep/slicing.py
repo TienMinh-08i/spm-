@@ -25,6 +25,7 @@ from specmind_prep.source_index import source_index
 from specmind_prep.gather.gather import revision
 from specmind_prep.project import validate_project
 from specmind_prep.injected.slice_instrumentation import Unsupported, analyze
+from specmind_prep.slice_process import run_bounded
 
 SCHEMA = "dynamic-slice-trace-v1"
 MODEL = "primitive-local-structured-ddg-v1"
@@ -143,20 +144,22 @@ def _execute(config, output, mode, timeout, repo, project):
         config["test"],
     ]
     log_path = output / (mode + ".log")
-    try:
-        with log_path.open("w", encoding="utf-8") as log:
-            proc = subprocess.run(
-                command, cwd=repo, env=env, stdout=log, stderr=subprocess.STDOUT, text=True, timeout=timeout
-            )
-    except subprocess.TimeoutExpired:
-        return {"timeout": True, "mode": mode}
-    if log_path.stat().st_size > config["max_bytes"]:
-        return {"missing_result": True, "mode": mode, "output_budget_exceeded": True}
+    execution = run_bounded(
+        command, cwd=repo, env=env, log_path=log_path, result_path=config["result"],
+        timeout=timeout, max_bytes=config["max_bytes"],
+    )
+    if execution.get("timeout"):
+        return dict(execution, mode=mode)
+    if execution.get("output_budget_exceeded") or execution.get("output_read_error"):
+        return dict(execution, missing_result=True, mode=mode)
     if Path(config["result"]).is_file() and Path(config["result"]).stat().st_size > 3 * config["max_bytes"]:
         return {"missing_result": True, "mode": mode, "output_budget_exceeded": True}
-    payload = read(Path(config["result"]))
-    if payload is None or payload.get("exitcode") != proc.returncode:
-        return {"missing_result": True, "mode": mode, "exitcode": proc.returncode}
+    try:
+        payload = read(Path(config["result"]))
+    except (ValueError, UnicodeError):
+        payload = None
+    if not isinstance(payload, dict) or payload.get("exitcode") != execution["exitcode"]:
+        return {"missing_result": True, "mode": mode, "exitcode": execution["exitcode"]}
     return payload
 
 
@@ -256,7 +259,8 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
         baseline = _execute(config, output, "baseline", timeout, repo, project)
         if baseline.get("timeout") or baseline.get("missing_result"):
             status = "incomplete"
-            issues = ["Baseline execution timed out or did not finalize"]
+            issues = ["Baseline output budget exceeded" if baseline.get("output_budget_exceeded") else
+                      "Baseline execution timed out or did not finalize"]
         elif baseline.get("baseline_limited"):
             status = "incomplete"
             issues = ["Baseline call budget exceeded"]
@@ -274,7 +278,8 @@ def trace_function(repo, project, test, target, output, *, timeout=60, max_event
                 or instrumented.get("limited")
             ):
                 status = "incomplete"
-                issues = ["Instrumented execution incomplete or event budget exceeded"]
+                issues = ["Instrumented output budget exceeded" if instrumented.get("output_budget_exceeded") else
+                          "Instrumented execution incomplete or event budget exceeded"]
             elif instrumented.get("errors") or instrumented.get("issues"):
                 status = "unsupported"
                 issues = instrumented.get("errors", []) + instrumented.get("issues", [])

@@ -30,6 +30,9 @@ Dùng venv riêng đã khóa dependency. Xem [môi trường chạy](STABLE_ENVI
 - Một test fail sau khi gọi hàm vẫn có thể cung cấp trace hợp lệ nếu hai lượt có cùng hành vi.
 - `--timeout` mặc định 60 giây cho mỗi lượt; `--max-events` mặc định 20000, tối đa 200000.
   Recorder cũng có giới hạn byte. Hết ngân sách/timeout cho trạng thái incomplete, không phải slice rỗng.
+  Timeout phải là số dương hữu hạn. Log stdout/stderr được giữ tối đa 8 MB và dừng subprocess
+  khi vượt; plugin ghi result JSON theo luồng với giới hạn 24 MB. Không coi các giới hạn này
+  là sandbox cho mọi file hoặc tài nguyên mà test có thể sử dụng.
 
 ## 2. Chọn lần gọi và truy vấn backward
 

@@ -130,6 +130,10 @@ def profile(frame, event, arg):
             try:
                 call.update(returned=True)
                 call["return"] = primitive(arg)
+                BASELINE_BYTES += len(json.dumps(call["return"], ensure_ascii=True))
+                if BASELINE_BYTES > CONFIG["max_bytes"]:
+                    LIMITED = True
+                    sys.setprofile(None)
             except ValueError as exc:
                 ERRORS.append(str(exc))
                 call["return"] = {"type": "unmodeled"}
@@ -192,6 +196,26 @@ def pytest_runtest_logreport(report):
     )
 
 
+def write_bounded_result(path, payload, limit):
+    """Stream JSON without first constructing a second full payload string."""
+    with Path(path).open("xb") as stream:
+        used = 0
+        for chunk in json.JSONEncoder(ensure_ascii=False, allow_nan=False).iterencode(payload):
+            raw = chunk.encode("utf-8")
+            if used + len(raw) > limit:
+                marker = json.dumps({
+                    "mode": payload["mode"], "exitcode": payload["exitcode"],
+                    "missing_result": True, "output_budget_exceeded": True,
+                }).encode("utf-8")
+                stream.seek(0)
+                stream.truncate()
+                if len(marker) <= limit:
+                    stream.write(marker)
+                return
+            stream.write(raw)
+            used += len(raw)
+
+
 def pytest_sessionfinish(session, exitstatus):
     if PATCHED:
         TARGET.__code__ = ORIGINAL
@@ -208,6 +232,4 @@ def pytest_sessionfinish(session, exitstatus):
         sites=SITES,
         baseline_limited=LIMITED,
     )
-    Path(CONFIG["result"]).write_text(
-        json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding="utf-8"
-    )
+    write_bounded_result(CONFIG["result"], payload, 3 * CONFIG["max_bytes"])
