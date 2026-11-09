@@ -79,6 +79,19 @@ def analyze(source, function_line, filename, *, call_names=()):
     used_calls = set()
     owner_site = None
 
+    def has_traced_call(nodes):
+        return bool(call_names) and any(
+            isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id in call_names
+            for node in nodes
+            for child in ast.walk(node)
+        )
+
+    def reject_conditional_calls(nodes):
+        if has_traced_call(nodes):
+            raise Unsupported(
+                "Conditional traced calls inside expressions require explicit if/else control flow"
+            )
+
     def expression(node, input_allowed=False, print_allowed=False):
         if node is None:
             return
@@ -94,13 +107,18 @@ def analyze(source, function_line, filename, *, call_names=()):
         elif isinstance(node, ast.UnaryOp):
             expression(node.operand)
         elif isinstance(node, ast.BoolOp):
+            # Later operands execute conditionally. The current model has no
+            # expression-level predicate occurrence to attach to the invocation.
+            reject_conditional_calls(node.values[1:])
             for v in node.values:
                 expression(v)
         elif isinstance(node, ast.Compare):
+            reject_conditional_calls(node.comparators[1:])
             expression(node.left)
             for v in node.comparators:
                 expression(v)
         elif isinstance(node, ast.IfExp):
+            reject_conditional_calls([node.body, node.orelse])
             expression(node.test)
             expression(node.body)
             expression(node.orelse)

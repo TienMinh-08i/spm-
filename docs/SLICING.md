@@ -91,6 +91,15 @@ hay caller-of-caller. Target bị gọi bên ngoài caller đã chọn được 
 Caller chạy nhưng không gọi target cho criterion_not_reached.
 Các giới hạn primitive/control flow hiện tại vẫn áp dụng. Không có --caller thì giữ model v2.
 
+Chưa có predicate event riêng cho lời gọi chạy có điều kiện bên trong biểu thức:
+`flag and target(x)`, `target(x) if flag else ...`, hoặc vị trí so sánh được short-circuit
+trong comparison chain. Các dạng này bị từ chối trước execution, vì nếu thiếu cạnh
+điều khiển thì query input của target có thể bỏ mất nguồn của flag. Dùng if/else tường minh
+trong code thử nghiệm thuộc subset hỗ trợ; không tự viết lại checkout để vượt giới hạn.
+Trace v3 cũ chứa các dạng này cũng bị reader từ chối, không đổi artifact cũ để cho qua.
+Điều kiện nằm trong chính argument như `target(x if flag else y)` vẫn được theo dõi:
+argument event ghi các read thực sự xảy ra, gồm flag và nhánh đã chọn.
+
 ## 3. File và ý nghĩa
 
 | File | Nội dung |

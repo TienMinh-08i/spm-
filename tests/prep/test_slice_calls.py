@@ -223,3 +223,35 @@ def test_cli_selected_caller_and_target_input_query(tmp_path, capsys):
     )
     assert {s["line"] for s in read(result_path)["source_statements"]} == {1, 4, 5}
     capsys.readouterr()
+
+
+@pytest.mark.parametrize(
+    "expression", ["flag and target(x)", "target(x) if flag else 0", "0 < int(flag) < target(x)"]
+)
+def test_conditionally_executed_call_inside_expression_is_explicitly_unsupported(tmp_path, expression):
+    repo, project, out = fixture(
+        tmp_path,
+        "def target(x):\n    return x\ndef caller(flag,x):\n    return " + expression + "\n",
+        "from demo import caller\ndef test_f():\n    assert caller(True,3)\n",
+    )
+    assert run(repo, project, out)["status"] == "unsupported"
+    assert not read(out / "ddg.json")
+    assert not (out / "baseline.json").exists()
+    assert "Conditional traced calls" in " ".join(read(out / "summary.json")["issues"])
+
+
+@pytest.mark.parametrize(
+    "expression,needs_flag", [("target(x if flag else x+1)", True), ("target(x) and flag", False)]
+)
+def test_argument_condition_and_unconditional_first_operand_remain_supported(
+    tmp_path, expression, needs_flag
+):
+    repo, project, out = fixture(
+        tmp_path,
+        "def target(x):\n    return x\ndef caller(flag,x):\n    return " + expression + "\n",
+        "from demo import caller\ndef test_f():\n    assert caller(True,3)\n",
+    )
+    assert run(repo, project, out)["status"] == "complete_supported"
+    result = sliced(out, repo, "demo.target")
+    flags = [n for n in result["nodes"] if n["kind"] == "parameter" and "flag" in n["writes"]]
+    assert bool(flags) is needs_flag
