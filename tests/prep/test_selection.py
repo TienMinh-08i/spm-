@@ -13,7 +13,7 @@ def test_full_selection_preserves_evidence_and_accumulates_errors():
     with pytest.raises(ValueError) as info:
         validate_selection([original], selection, index, project)
     assert 'field document' in str(info.value) and 'field docstring' in str(info.value)
-    assert 'delegation is unsupported' in str(info.value)
+    assert 'Target must be null' in str(info.value)
 
 
 def test_unknown_duplicate_and_delegate_are_all_reported():
@@ -22,7 +22,92 @@ def test_unknown_duplicate_and_delegate_are_all_reported():
                  {'function_id': 'p.f', 'status': 'documented', 'decision': 'delegate', 'reason': 'x', 'target': None}]
     with pytest.raises(ValueError) as info:
         validate_selection(rows, selection, {}, {})
-    assert 'Unknown' in str(info.value) and 'keep/drop' in str(info.value)
+    assert 'Unknown' in str(info.value) and 'Delegate target' in str(info.value)
+
+
+def test_delegates_share_source_but_never_task_or_api_spec():
+    rows = [{'function_id': f'p.{name}', 'status': 'documented', 'docstring': name,
+             'document': name+' contract'} for name in ('a', 'b')]
+    selection = [dict(r, decision='delegate', reason=None, target='p._helper') for r in rows]
+    index = {'p._helper': {'problem_id': 'p._helper', 'source': 'def _helper(x): return x+1',
+                          'entry_point': '_helper', 'module': 'p', 'line': 10}}
+    result = validate_selection(rows, selection, index, {'name': 'p', 'python_path': []})
+    assert [r['problem_id'] for r in result] == ['p._helper', 'p._helper']
+    assert {r['task_id'] for r in result} == {'p/p.a', 'p/p.b'}
+    assert {r['document'] for r in result} == {'a contract', 'b contract'}
+    assert all(r['entry_point'] == '_helper' and r['line'] == 10 for r in result)
+
+
+@pytest.mark.parametrize('target', [None, 'p.a', 'p.missing'])
+def test_delegate_rejects_missing_self_and_unknown_target(target):
+    rows = [{'function_id': 'p.a', 'status': 'documented'}]
+    selection = [dict(rows[0], decision='delegate', reason=None, target=target)]
+    with pytest.raises(ValueError, match='Delegate target'):
+        validate_selection(rows, selection, {'p.a': {'problem_id': 'p.a'}}, {'name': 'p', 'python_path': []})
+
+
+def test_final_selection_cannot_silently_omit_eligible_api():
+    rows = [{'function_id': f'p.{name}', 'status': 'documented'} for name in ('a', 'b')]
+    selection = [dict(rows[0], decision='keep', reason=None, target=None)]
+    with pytest.raises(ValueError, match='missing=.*p.b'):
+        validate_selection(rows, selection, {'p.a': {'problem_id': 'p.a'}}, {'name': 'p', 'python_path': []})
+
+
+def test_eligibility_requires_explicit_complete_evidence():
+    from specmind_prep.selection import reviewed_inventory
+    rows = [{'function_id': 'p.a', 'status': 'documented'},
+            {'function_id': 'p.b', 'status': 'missing_document'}]
+    review = [{'function_id': 'p.a', 'included': True, 'reason': 'Own public docs anchor'},
+              {'function_id': 'p.b', 'included': False, 'reason': 'No function anchor'}]
+    assert reviewed_inventory(rows, review) == rows[:1]
+    with pytest.raises(ValueError, match='every inventory'):
+        reviewed_inventory(rows, review[:1])
+    review[1]['included'] = True
+    with pytest.raises(ValueError, match='Unresolved'):
+        reviewed_inventory(rows, review)
+
+
+def test_trace_does_not_collapse_delegated_api_calls(tmp_path, monkeypatch):
+    from specmind_prep.trace import trace as tracing
+    from specmind_eval.common.jsonl import write_jsonl
+    candidates = tmp_path/'candidates'
+    candidates.mkdir()
+    write_jsonl(candidates/'problems.jsonl', [{'decision': 'delegate', 'problem_id': 'p.helper'}])
+    monkeypatch.setattr(tracing, 'validate_candidates', lambda *a: {'project': {}})
+    with pytest.raises(ValueError, match='API-specific call bindings'):
+        tracing.trace(candidates, tmp_path/'repo', tmp_path/'links')
+    assert not (tmp_path/'links').exists()
+
+
+def test_reviewed_selection_seals_policy_and_revalidates(tmp_path, monkeypatch):
+    from specmind_prep import selection as module
+    from specmind_eval.common.jsonl import write_jsonl
+    from specmind_eval.common.storage import read
+    repo, docs = tmp_path/'repo', tmp_path/'docs'
+    repo.mkdir()
+    docs.mkdir()
+    rows = [{'function_id': 'p.api', 'status': 'documented', 'docstring': 'API contract'}]
+    index = {'p._helper': {'problem_id': 'p._helper', 'source': 'def _helper(x): return x+1'},
+             'p.api': {'source':'def api(x): return _helper(x)', 'repo_path':'p.py', 'code_line':1}}
+    (repo/'p.py').write_text('def api(x): return _helper(x)')
+    project = {'name': 'p', 'commit': 'abc', 'python_path': []}
+    monkeypatch.setattr(module, 'load_project', lambda *a, **k: project)
+    monkeypatch.setattr(module, 'revision', lambda *a: 'abc')
+    monkeypatch.setattr(module, 'validate_docs', lambda *a: {'output_digest': 'docs'})
+    monkeypatch.setattr(module, 'collect_inventory', lambda *a: (rows, index))
+    monkeypatch.setattr(module, 'source_environment', lambda *a: {})
+    selected, eligibility = tmp_path/'selection.jsonl', tmp_path/'eligibility.jsonl'
+    write_jsonl(selected, [dict(rows[0], decision='delegate', reason=None, target='p._helper')])
+    write_jsonl(eligibility, [{'function_id': 'p.api', 'included': True, 'reason': 'Own public anchor'}])
+    output = tmp_path/'candidates'
+    summary = module.prepare_selection(repo, tmp_path/'project.json', docs, selected, output,
+                                       eligibility_path=eligibility)
+    assert summary['decisions'] == {'keep': 0, 'delegate': 1, 'drop': 0}
+    manifest = read(output/'manifest.json')
+    module.validate_selection_artifact(output, repo, manifest)
+    manifest['selection_complete'] = False
+    with pytest.raises(ValueError, match='fingerprint'):
+        module.validate_selection_artifact(output, repo, manifest)
 
 
 def test_collection_selection_is_separate_from_project_facts(tmp_path, monkeypatch):
@@ -35,6 +120,9 @@ def test_collection_selection_is_separate_from_project_facts(tmp_path, monkeypat
     link = {'fingerprint': 'links', 'files': {}}
     monkeypatch.setattr(gathering, 'validate_candidates', lambda *a: parent)
     monkeypatch.setattr(tracing, 'validate_links', lambda *a: link)
+    from specmind_eval.common.storage import write
+    write(tmp_path/'links/command.json', {'argv':['python','-p','specmind_prep.injected.call_trace_plugin',*selected]})
+    link['test_selection']=selected
     captured = {}
     def prepare(*a, **kwargs):
         captured.update(kwargs)

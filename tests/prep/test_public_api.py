@@ -1,8 +1,11 @@
+import json
+import subprocess
 
 import pytest
 
 from specmind_prep.project import validate_project
-from specmind_prep.public_api import inventory
+from specmind_prep.public_api import analyze, inventory
+from specmind_prep.references import public_calls
 
 
 @pytest.fixture
@@ -74,3 +77,57 @@ def test_explicit_members_and_exclusion(sample):
     result, _ = inventory(repo, project)
     assert [r['definition'] for r in result['api']] == ['acme.api.Thing']
     assert result['excluded_members'][0]['symbol'] == 'acme.Thing._secret'
+
+
+def test_batch_calls_scope_alias_and_uncertainty(sample):
+    repo, project = sample
+    api, model = inventory(repo, project)
+    calls, unknown, scan = public_calls(repo, project, api['api'], model)
+    f_calls = [r for r in calls if r['target'] == 'acme.api.f']
+    assert len(f_calls) == 6  # source method + module + class + twice in test + nested
+    assert {r['caller_kind'] for r in f_calls} == {'module', 'class_body', 'function'}
+    assert any(r['caller'].endswith('.nested') for r in f_calls)
+    assert any(r['expression'] == 'obj.run()' and r['resolution'] == 'name_only_possible' for r in unknown)
+    assert any('test_shadow' in r['caller'] for r in unknown)
+    assert not any('test_shadow' in r['caller'] for r in calls)
+    assert scan['test_files'] == 1
+
+
+def test_artifacts_cli_and_output_guards(sample, tmp_path, capsys):
+    from specmind_prep.cli import main
+    repo, project = sample
+    subprocess.run(['git', 'init', str(repo)], check=True, capture_output=True)
+    subprocess.run(['git', '-C', str(repo), 'add', '.'], check=True, capture_output=True)
+    subprocess.run(['git', '-C', str(repo), '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                    'commit', '-m', 'fixture'], check=True, capture_output=True)
+    config = tmp_path / 'project.json'
+    config.write_text(json.dumps(project))
+    out = tmp_path / 'output'
+    args = ['public-api-callers', '--repo', str(repo), '--project', str(config), '--output', str(out)]
+    assert main(args) == 0
+    capsys.readouterr()
+    assert len(list(out.iterdir())) == 6
+    manifest = json.loads((out / 'manifest.json').read_text())
+    assert manifest['complete'] and manifest['counts']['functions_methods'] == 2
+    assert main(args) == 1
+    with pytest.raises(ValueError, match='outside'):
+        analyze(repo, project, repo / 'output')
+
+
+def test_no_target_import_and_missing_docs_fail(sample):
+    repo, project = sample
+    p = repo / 'src/acme/api.py'
+    p.write_text('raise RuntimeError("must not import")\n' + p.read_text())
+    assert inventory(repo, project)[0]['api']
+    (repo / 'docs/api.rst').unlink()
+    with pytest.raises(FileNotFoundError):
+        inventory(repo, project)
+
+
+def test_dynamic_receivers_remain_visible(sample):
+    repo, project = sample
+    (repo / 'tests/dynamic.py').write_text('from acme import Thing\ndef check(items):\n    Thing().run()\n    items[0].run()\n')
+    api, model = inventory(repo, project)
+    _, unknown, _ = public_calls(repo, project, api['api'], model)
+    expressions = {r['expression'] for r in unknown}
+    assert {'Thing().run()', 'items[0].run()'} <= expressions

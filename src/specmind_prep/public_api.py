@@ -3,8 +3,13 @@
 This is an explicit source policy, not a Sphinx rendering/emulation engine.
 """
 import ast
+import csv
 import hashlib
+import json
 import re
+import subprocess
+from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 
 from specmind_prep.references import FUNCTIONS, dotted, module_bindings
@@ -215,3 +220,102 @@ def inventory(repo, project, *, api_index='api_reference.rst', public_caption='A
               'excluded_pages': sorted(private_pages), 'excluded_members': excluded,
               'unresolved': unresolved, 'documentation_sha256': evidence_hashes}
     return result, model
+
+
+def analyze(repo, project, output, *, api_index='api_reference.rst'):
+    from specmind_prep.references import public_calls
+    repo, output = Path(repo).resolve(), Path(output).resolve()
+    if output.is_relative_to(repo) or repo.is_relative_to(output):
+        raise ValueError('Output must be outside analyzed checkout')
+    if output.exists():
+        raise ValueError('Output already exists; choose a new directory')
+    proc = subprocess.run(['git', '-C', str(repo), 'rev-parse', 'HEAD'], capture_output=True, text=True, timeout=30, check=True)
+    commit = proc.stdout.strip()
+    if project.get('commit') and project['commit'] != commit:
+        raise ValueError('Project commit does not match checkout')
+    api, model = inventory(repo, project, api_index=api_index)
+    calls, unresolved, scan = public_calls(repo, project, api['api'], model)
+    rows = []
+    for item in api['api']:
+        key = item['definition']
+        matched = [c for c in calls if c['target'] == key]
+        possible = [c for c in unresolved if key in c.get('candidate_targets', [])]
+        rows.append({'api': key, 'kind': item['kind'], 'experimental': item['experimental'],
+                     'public_names': ';'.join(item['public_names']), 'location': item['location'],
+                     'source_callers': len({c['caller_id'] for c in matched if c['scope'] == 'source' and c['caller_kind'] == 'function'}),
+                     'test_callers': len({c['caller_id'] for c in matched if c['scope'] == 'tests' and c['caller_kind'] == 'function'}),
+                     'source_sites': sum(c['scope'] == 'source' for c in matched),
+                     'test_sites': sum(c['scope'] == 'tests' for c in matched),
+                     'non_function_sites': sum(c['caller_kind'] != 'function' for c in matched),
+                     'explicit_call_sites': sum(c['invocation'] == 'call' for c in matched),
+                     'implicit_decorator_sites': sum(c['invocation'] == 'decorator' for c in matched),
+                     'possible_sites': len(possible)})
+    function_rows = [r for r in rows if r['kind'] in {'function', 'method'}]
+    counts = {'api_entries': len(rows), 'kinds': dict(Counter(r['kind'] for r in rows)),
+              'functions_methods': len(function_rows),
+              'functions_methods_with_resolved_sites': sum(r['source_sites'] + r['test_sites'] > 0 for r in function_rows),
+              'functions_methods_with_function_callers': sum(r['source_callers'] + r['test_callers'] > 0 for r in function_rows),
+              'functions_methods_only_possible': sum((r['source_sites'] + r['test_sites']) == 0 and r['possible_sites'] > 0 for r in function_rows),
+              'functions_methods_no_candidates': sum((r['source_sites'] + r['test_sites']) == 0 and not r['possible_sites'] for r in function_rows),
+              'resolved_sites': len(calls), 'unresolved_sites': len(unresolved),
+              'resolved_source_sites': sum(c['scope'] == 'source' for c in calls),
+              'resolved_test_sites': sum(c['scope'] == 'tests' for c in calls),
+              'resolved_function_method_sites': sum(r['source_sites'] + r['test_sites'] for r in function_rows),
+              'resolved_class_construction_sites': sum(r['source_sites'] + r['test_sites'] for r in rows if r['kind'] == 'class'),
+              'classes_with_resolved_sites': sum(r['kind'] == 'class' and r['source_sites'] + r['test_sites'] > 0 for r in rows),
+              'experimental_entries': sum(r['experimental'] for r in rows)}
+    limitations = [
+        'Static source inventory, not a Sphinx build or proof of a complete runtime API.',
+        'Only the selected API Reference toctree is included; Private API pages are excluded.',
+        'Class construction is counted separately from function/method calls; properties and private/dunder members are excluded.',
+        'Only documented own members are inventoried; inherited API aliases and dynamic extension hooks need review.',
+        'Static name resolution assumes no runtime monkey-patching; instance dispatch and same-name matches are possible, not confirmed.',
+        'Only source packages and configured tests are scanned, including nested functions and module/class bodies; not external applications or documentation examples.',
+        'Bare decorators are implicit invocations and have separate counts; passing a callable as a value is not counted as a call.',
+        'Possible-site counts overlap across API targets and must not be summed as unique call sites.',
+        'No tests of the analyzed project, Docker, LLM, program slicing or prompt changes are performed.',
+    ]
+    dirty = subprocess.run(['git', '-C', str(repo), 'status', '--porcelain'], capture_output=True, text=True, timeout=30, check=True).stdout
+    hashes = {**model['hashes'], **scan['hashes'], **api['documentation_sha256']}
+    conf = repo / project['docs_dir'] / 'conf.py'
+    if conf.exists():
+        hashes[conf.relative_to(repo).as_posix()] = hashlib.sha256(conf.read_bytes()).hexdigest()
+    for name, expected in hashes.items():
+        if hashlib.sha256((repo / name).read_bytes()).hexdigest() != expected:
+            raise ValueError('Input changed during analysis: ' + name)
+    output.mkdir(parents=True)
+    def dump(name, value):
+        (output / name).write_text(json.dumps(value, ensure_ascii=False, indent=2) + '\n', encoding='utf8')
+    dump('public_api.json', api)
+    for name, values in [('calls.jsonl', calls), ('unresolved.jsonl', api['unresolved'] + unresolved)]:
+        (output / name).write_text(''.join(json.dumps(v, ensure_ascii=False) + '\n' for v in values), encoding='utf8')
+    with (output / 'summary.csv').open('w', encoding='utf-8-sig', newline='') as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]) if rows else ['api'])
+        writer.writeheader()
+        writer.writerows(rows)
+    report = ['# Public API and caller audit', '', f'Checkout: `{repo}`', f'Commit: `{commit}`', '',
+              '## Counts', '', '```json', json.dumps(counts, indent=2), '```', '',
+              '## Public callable inventory', '', '| API | Kind | Source callers | Test callers | Resolved sites | Possible sites |',
+              '|---|---|---:|---:|---:|---:|']
+    report += [f"| {r['api']} | {r['kind']} | {r['source_callers']} | {r['test_callers']} | {r['source_sites'] + r['test_sites']} | {r['possible_sites']} |" for r in rows]
+    report += ['', '## Interpretation and limits', ''] + ['- ' + x for x in limitations]
+    report += ['', '## Functions/methods without resolved sites', '',
+               '| API | Possible sites (name only) |', '|---|---:|']
+    report += [f"| {r['api']} | {r['possible_sites']} |" for r in function_rows if not r['source_sites'] + r['test_sites']]
+    report += ['', '## Example resolved evidence', '', '| API | Caller | Call site | Expression |', '|---|---|---|---|']
+    for item in function_rows:
+        examples = [c for c in calls if c['target'] == item['api']][:2]
+        report += [f"| {c['target']} | {c['caller']} | {c['location']} | `{c['expression'].replace('|', '/').replace(chr(10), ' ')}` |" for c in examples]
+    report += ['', '## Documentation exclusions', ''] + ['- ' + p for p in api['excluded_pages']]
+    report += ['', '## Review items', '', f"Documentation unresolved/non-callable entries: {len(api['unresolved'])}.",
+               f"Private/property member exclusions: {len(api['excluded_members'])}.",
+               'See unresolved.jsonl and public_api.json for exact evidence. No caller found does not mean unused.', '']
+    (output / 'REPORT.md').write_text('\n'.join(report), encoding='utf8')
+    dump('manifest.json', {'schema': 'public-api-callers-v1', 'complete': True,
+                           'created_utc': datetime.now(timezone.utc).isoformat(), 'repo': str(repo),
+                           'commit': commit, 'dirty_status': dirty, 'project': project, 'api_index': api_index,
+                           'counts': counts, 'scan': {k: v for k, v in scan.items() if k != 'hashes'},
+                           'input_sha256': hashes, 'limitations': limitations,
+                           'implementation_sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in [Path(__file__), Path(__file__).with_name('references.py')]},
+                           'files': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in output.iterdir() if p.is_file()}})
+    return {'output': str(output), **counts}

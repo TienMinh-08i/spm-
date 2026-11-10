@@ -127,3 +127,24 @@ def test_flat_layout(sample):
     project = validate_project({**project, 'source_root': '.', 'python_path': ['.']}, repo)
     index, _ = source_index(repo, project)
     assert references(repo, index, 'acme.math.target')['target']['location'] == 'acme/math.py:1'
+
+
+def test_batch_decorators_and_name_collision(sample):
+    from specmind_prep.public_api import declarations
+    from specmind_prep.references import public_calls
+    repo, project = sample
+    (repo / 'src/acme/decorators.py').write_text('''from .math import target
+@target
+def wrapped():
+    return 1
+def arbitrary(obj):
+    return obj.target(1)
+''')
+    model = declarations(repo, project)
+    api = [{'definition': name, 'public_names': [name]}
+           for name in ('acme.math.target', 'acme.other.target')]
+    calls, unknown, _ = public_calls(repo, project, api, model)
+    assert any(c['invocation'] == 'decorator' and c['target'] == 'acme.math.target' for c in calls)
+    candidate = next(c for c in unknown if c['expression'] == 'obj.target(1)')
+    assert candidate['candidate_targets'] == ['acme.math.target', 'acme.other.target']
+    assert not any(c['expression'] == 'obj.target(1)' for c in calls)

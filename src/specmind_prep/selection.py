@@ -68,10 +68,30 @@ def collect_inventory(repo, project, docs, docs_manifest, review_ids):
     return rows, index
 
 
+def reviewed_inventory(rows, eligibility):
+    """Apply explicit Step 1 review; omitted proposals are never implicit exclusions."""
+    if not isinstance(eligibility, list) or any(not isinstance(r, dict) for r in eligibility):
+        raise ValueError('Eligibility must contain explicit objects')
+    proposed = {r['function_id']: r for r in rows}
+    ids = [r.get('function_id') for r in eligibility]
+    if len(ids) != len(set(ids)) or set(ids) != set(proposed):
+        raise ValueError('Eligibility must cover every inventory function exactly once')
+    included = set()
+    for row in eligibility:
+        if type(row.get('included')) is not bool or not isinstance(row.get('reason'), str) or not row['reason'].strip():
+            raise ValueError('Eligibility requires boolean included and an evidence reason')
+        key = row['function_id']
+        if row['included']:
+            if proposed[key]['status'] != 'documented':
+                raise ValueError('Unresolved Step 1 eligibility: '+key)
+            included.add(key)
+    return [r for r in rows if r['function_id'] in included]
+
+
 def selected_candidates(rows, selection, index, project, limit=5):
     """Validate the explicitly scoped sample. Never turn pending rows into drop."""
-    if not isinstance(limit, int) or not 1 <= limit <= 22:
-        raise ValueError('Selection limit must be between 1 and 22')
+    if limit is not None and (type(limit) is not int or limit < 1):
+        raise ValueError('Selection limit must be a positive integer')
     if not isinstance(selection, list) or not selection:
         raise ValueError('Selection must contain explicit rows')
     by_id = {r['function_id']: r for r in rows}
@@ -83,24 +103,30 @@ def selected_candidates(rows, selection, index, project, limit=5):
         seen.add(key)
         if key not in by_id:
             errors.append('Unknown function: '+str(key)); continue
-        if decision not in {'keep', 'drop'}:
-            errors.append('Selection supports keep/drop only: '+key); continue
-        if not isinstance(row.get('reason'), str) or not row['reason'].strip():
-            errors.append('Selection requires a reason for every decision: '+key)
+        if decision not in {'keep', 'drop', 'delegate'}:
+            errors.append('Selection supports keep/drop/delegate only: '+key); continue
+        if decision == 'drop' and (not isinstance(row.get('reason'), str) or not row['reason'].strip()):
+            errors.append('Selection requires a reason for drop: '+key)
+        target = row.get('target')
+        if decision != 'delegate' and target is not None:
+            errors.append('Target must be null for keep/drop: '+key)
         if decision == 'drop':
             continue
         if by_id[key]['status'] != 'documented':
             errors.append('Unresolved Step 1 eligibility: '+key); continue
-        result.append(dict(index[key], **by_id[key], decision='keep', reason=row['reason'], target=None,
+        analyzed = target if decision == 'delegate' else key
+        if not isinstance(analyzed, str) or analyzed not in index or (decision == 'delegate' and analyzed == key):
+            errors.append('Delegate target must be a different source function: '+key); continue
+        result.append(dict(index[analyzed], **by_id[key], decision=decision, reason=row.get('reason'), target=target,
                            task_id=project['name']+'/'+key, _python_path=project['python_path']))
     if errors:
         raise ValueError('\n'.join(errors))
-    if not 1 <= len(result) <= limit:
+    if not result or (limit is not None and len(result) > limit):
         raise ValueError(f'Selection must keep 1 to {limit} candidates')
-    return sorted(result, key=lambda p: p['problem_id'])
+    return sorted(result, key=lambda p: (p['problem_id'], p['function_id']))
 
 
-def validate_selection(rows, selection, index, project, limit=22):
+def validate_selection(rows, selection, index, project, limit=None, *, require_complete=True):
     """Full rows preserve Step 1 evidence; collect all row errors before rejecting."""
     if not isinstance(selection, list) or not selection:
         raise ValueError('Selection must contain explicit rows')
@@ -115,10 +141,15 @@ def validate_selection(rows, selection, index, project, limit=22):
             for field, expected in original.items():
                 if field not in row or row[field] != expected:
                     errors.append(f'Row {i}: changed or missing inventory field {field}')
-        if 'target' not in row or row['target'] is not None:
-            errors.append(f'Row {i}: target must be null for keep/drop; delegation is unsupported')
+        if 'target' not in row:
+            errors.append(f'Row {i}: missing target')
     if any(not isinstance(row, dict) for row in selection):
         raise ValueError('\n'.join(errors))
+    if require_complete:
+        selected = {r.get('function_id') for r in selection}
+        if selected != set(by_id):
+            errors.append('Selection must match finalized Step 1: missing='+str(sorted(set(by_id)-selected))+
+                          ', extra='+str(sorted(selected-set(by_id), key=str)))
     try:
         candidates = selected_candidates(rows, selection, index, project, limit)
     except ValueError as exc:
@@ -128,7 +159,8 @@ def validate_selection(rows, selection, index, project, limit=22):
     return candidates
 
 
-def prepare_selection(repo, project_path, docs, selection_path, output, *, review_ids=(), tests=None, limit=22):
+def prepare_selection(repo, project_path, docs, selection_path, output, *, review_ids=(), tests=None, limit=None,
+                      eligibility_path=None, require_complete=True):
     """Seal a validated manual selection as candidates without collecting any tests."""
     repo, docs, selection_path = [Path(p).resolve() for p in (repo, docs, selection_path)]
     output = separate_output(output, repo, docs, selection_path)
@@ -137,27 +169,41 @@ def prepare_selection(repo, project_path, docs, selection_path, output, *, revie
         raise ValueError('Source commit mismatch')
     dm = validate_docs(docs, project['commit'])
     rows, index = collect_inventory(repo, project, docs, dm, set(review_ids))
+    eligibility = read_jsonl(eligibility_path) if eligibility_path is not None else None
+    eligible = reviewed_inventory(rows, eligibility) if eligibility is not None else rows
     selection = read_jsonl(selection_path)
-    candidates = validate_selection(rows, selection, index, project, limit)
+    candidates = validate_selection(eligible, selection, index, project, limit, require_complete=require_complete)
+    from specmind_prep.delegation import bind_delegates
+    candidates = bind_delegates(candidates, index, repo)
     if output.exists():
         raise ValueError('Output exists; choose a new selection directory')
     output.mkdir(parents=True)
     write_jsonl(output/'inventory.jsonl', rows)
     write_jsonl(output/'selection.jsonl', selection)
     write_jsonl(output/'problems.jsonl', candidates)
+    if eligibility is not None:
+        write_jsonl(output/'eligibility.jsonl', eligibility)
     write(output/'docs_reference.json', {'path': str(docs), 'output_digest': dm['output_digest'],
                                        'review_ids': list(review_ids)})
     summary = {'candidate_functions': len(candidates), 'inventory_functions': len(rows),
+               'public_api_functions': len(eligible),
+               'decisions': {d: sum(r['decision'] == d for r in selection) for d in ('keep', 'delegate', 'drop')},
+               'unique_analysis_targets': len({p['problem_id'] for p in candidates}),
                'documented_functions': sum(r['status'] == 'documented' for r in rows), 'output': str(output)}
     write(output/'summary.json', summary)
     files = {n: file_hash(output/n) for n in ('inventory.jsonl', 'selection.jsonl', 'problems.jsonl',
                                              'docs_reference.json', 'summary.json')}
-    manifest = {'schema': 'candidates-v1', 'complete': True, 'producer': 'manual-selection-v1',
+    if eligibility is not None:
+        files['eligibility.jsonl'] = file_hash(output/'eligibility.jsonl')
+    selection_policy = {'eligibility_reviewed': eligibility is not None, 'selection_complete': require_complete}
+    manifest = {'schema': 'candidates-v1', 'complete': True, 'producer': 'manual-selection-v3',
+                'eligibility_reviewed': eligibility is not None,
+                'selection_complete': require_complete,
                 'project': project, 'repo': str(repo), 'repo_commit': project['commit'],
                 'source_environment': source_environment(repo), 'test_selection': tests,
                 'files': files, 'lineage': {'docs_digest': dm['output_digest']},
                 'fingerprint': digest({'files': files, 'project': project, 'tests': tests,
-                                       'environment': source_environment(repo)})}
+                                       'environment': source_environment(repo), 'selection_policy': selection_policy})}
     write(output/'manifest.json', manifest)
     return summary
 
@@ -176,11 +222,22 @@ def validate_selection_artifact(directory, repo, manifest):
     rows, index = collect_inventory(Path(repo), manifest['project'], docs, dm, set(ref['review_ids']))
     if rows != read_jsonl(directory/'inventory.jsonl'):
         raise ValueError('Candidate inventory differs from source/docs')
-    candidates = validate_selection(rows, read_jsonl(directory/'selection.jsonl'), index, manifest['project'])
+    if manifest.get('eligibility_reviewed'):
+        if 'eligibility.jsonl' not in manifest['files']:
+            raise ValueError('Manual candidates missing eligibility evidence')
+        rows = reviewed_inventory(rows, read_jsonl(directory/'eligibility.jsonl'))
+    candidates = validate_selection(rows, read_jsonl(directory/'selection.jsonl'), index, manifest['project'],
+                                    require_complete=manifest.get('selection_complete', manifest['producer'] != 'manual-selection-v1'))
+    if manifest['producer'] == 'manual-selection-v3':
+        from specmind_prep.delegation import bind_delegates
+        candidates = bind_delegates(candidates, index, repo)
     if candidates != read_jsonl(directory/'problems.jsonl'):
         raise ValueError('Candidates differ from validated selection')
-    expected = digest({'files': manifest['files'], 'project': manifest['project'],
-                       'tests': manifest.get('test_selection'), 'environment': manifest['source_environment']})
+    payload = {'files': manifest['files'], 'project': manifest['project'],
+               'tests': manifest.get('test_selection'), 'environment': manifest['source_environment']}
+    if manifest['producer'] in {'manual-selection-v2', 'manual-selection-v3'}:
+        payload['selection_policy'] = {k: manifest[k] for k in ('eligibility_reviewed', 'selection_complete')}
+    expected = digest(payload)
     if manifest['fingerprint'] != expected:
         raise ValueError('Manual candidate fingerprint mismatch')
 
@@ -191,7 +248,9 @@ if __name__ == '__main__':
         parser.add_argument('--'+name, type=Path, required=True)
     parser.add_argument('--review-id', action='append', default=[])
     parser.add_argument('--test', action='append')
-    parser.add_argument('--limit', type=int, default=22)
+    parser.add_argument('--limit', type=int)
+    parser.add_argument('--eligibility', type=Path)
     args = parser.parse_args()
     print(json.dumps(prepare_selection(args.repo, args.project, args.docs, args.selection, args.output,
-                                      review_ids=args.review_id, tests=args.test, limit=args.limit), indent=2))
+                                      review_ids=args.review_id, tests=args.test, limit=args.limit,
+                                      eligibility_path=args.eligibility), indent=2))
