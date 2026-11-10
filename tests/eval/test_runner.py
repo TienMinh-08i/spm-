@@ -82,7 +82,8 @@ def test_experiment_and_common_corpus_comparison(setup, monkeypatch):
     attach_graph(config, output.parent)
     monkeypatch.setattr("specmind_eval.context.callgraph.verify_commit", lambda *a: None)
     result = experiment(config, output)
-    assert result == {"rows": 4, "functions": 1, "unfinished": 0}
+    assert result == {"rows": 4, "functions": 1, "unfinished": 0,
+                      "generation_provenance": {"mock": 4}, "all_responses_recorded_live": False}
     rows = read(output / "comparison.json")
     assert all(r["common_assertion_evaluated"] == 1 and r["common_assertion_score"] == 1 for r in rows)
     assert all(r["common_paired"] == 0 and r["common_new_assertion_score"] is None for r in rows)

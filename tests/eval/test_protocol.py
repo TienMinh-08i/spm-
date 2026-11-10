@@ -78,7 +78,7 @@ def test_context_none_preserves_baseline_prompt(tmp_path, mode):
         template = template.replace("{" + key + "}", str(value))
 
     def call(messages, settings):
-        assert messages[1]["content"] == template
+        assert messages[1]["content"] == template + '\n\nObservation semantics: parameter bindings come from the original call. Mutable argument contents are observed after the target returns. No pre-call snapshots are available to assertions; do not infer original contents from mutated objects.'
         return "<solution>assert return_value == 1</solution>", {"total_tokens": 10}
 
     generate(

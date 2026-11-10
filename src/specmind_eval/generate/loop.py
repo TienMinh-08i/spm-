@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from time import perf_counter
+from specmind_eval.common.fingerprint import digest
 
 from specmind_eval.generate.feedback import build_feedback
 from specmind_eval.generate.parsing import double_check_postcondition, parse_model_response
@@ -54,6 +55,19 @@ def generate(source, entrypoint, evaluator, mutants, config, path, call=request_
             "based solely on its **docstring** and **implementation**",
             "based on its **docstring**, **implementation**, and supplied repository evidence",
         )
+    problem = getattr(evaluator, 'problem', {})
+    state_attributes = config.get('state_attributes', {}).get(problem.get('problem_id'), [])
+    if problem.get('function_id'):
+        prompt += ('\n\nAPI contract owner: '+problem['function_id']+
+                   '\nAnalysis target: '+problem['problem_id']+
+                   '\nAPI documentation (contract):\n'+str(problem.get('document') or problem.get('docstring') or ''))
+        if problem.get('_delegate_binding'):
+            prompt += ('\nThis API delegates to the analyzed helper. Generate assertions using the helper parameter names. '
+                       'The helper implementation docstring is context; preserve the API contract above. '
+                       'Evaluation only checks calls owned by this API. Forwarding bindings: '+str(problem['_delegate_binding']))
+    prompt += ('\n\nObservation semantics: parameter bindings come from the original call. '
+               'Mutable argument contents are observed after the target returns. '
+               'No pre-call snapshots are available to assertions; do not infer original contents from mutated objects.')
     if repository_context:
         prompt += "\n\n" + repository_context
     if config.get('assertion_policy') == 'behavioral':
@@ -65,6 +79,10 @@ def generate(source, entrypoint, evaluator, mutants, config, path, call=request_
             '(inspect generator predicates, math numeric predicates, re matching, collections.abc types). '
             'Policy violations receive feedback and consume one attempt.'
         )
+        if state_attributes:
+            prompt += ('\nDeclared application output state may be read on inputs/return_value: '+
+                       ', '.join(state_attributes)+'. These explicitly allowed state fields are an exception '
+                       'to the metadata restriction; Python runtime introspection remains forbidden.')
     state = read(
         path,
         {
@@ -75,6 +93,9 @@ def generate(source, entrypoint, evaluator, mutants, config, path, call=request_
             "done": False,
         },
     )
+    expected_prefix = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}]
+    if state.get("history", [])[:2] != expected_prefix:
+        raise ValueError("Generation prompt/protocol changed; use a new output directory")
     state.setdefault("generation_done", state["done"])
     refresh(state, mutants)
     if state['done']:
@@ -115,12 +136,19 @@ def generate(source, entrypoint, evaluator, mutants, config, path, call=request_
             # Persist paid model output before evaluation, so interrupted evaluation can resume it.
             pending = read(path.with_name("pending_response.json"))
             if pending and pending["turn"] == turn:
+                if pending.get("messages_sha256") != digest(state["history"]):
+                    raise ValueError("Pending response prompt changed or lacks provenance; use a new output directory")
                 raw, usage = pending["raw"], pending["usage"]
+                response_origin = pending.get("response_origin") or ("cached_response" if usage.get("cached_response") else "unknown_saved_response")
+                response_delivery = "pending_resume"
             elif config.get("mock_assertion") is not None:
                 raw, usage = "<solution>\n" + config["mock_assertion"] + "\n</solution>", {}
+                response_origin, response_delivery = "mock", "new_response"
             else:
                 raw, usage = call(state["history"], config)
-            write(path.with_name("pending_response.json"), {"turn": turn, "raw": raw, "usage": usage})
+                response_origin = "cached_response" if usage.get("cached_response") else "live_model" if call is request_llm else "custom_callable"
+                response_delivery = "new_response"
+            write(path.with_name("pending_response.json"), {"turn": turn, "raw": raw, "usage": usage, "response_origin": response_origin, "messages_sha256": digest(state["history"])})
         except Exception as exc:
             state["error"] = f"{type(exc).__name__}: {exc}"
             write(path, state)
@@ -140,6 +168,8 @@ def generate(source, entrypoint, evaluator, mutants, config, path, call=request_
             "turn": turn,
             "action": action,
             "raw_response": raw,
+            "response_origin": response_origin,
+            "response_delivery": response_delivery,
             "assertion": cleaned,
             "correctness": correctness,
             "mutation": mutation,

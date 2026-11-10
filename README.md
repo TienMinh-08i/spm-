@@ -12,7 +12,7 @@ Checkout → gather → trace → lọc True/False → scope → mutant
 
 ## 1. Chuẩn bị môi trường
 
-Cần Git, Python 3.11 và Docker Desktop chạy Linux containers nếu muốn tạo mutant. Có thể trích xuất và lọc dataset mà chưa cần Docker. API key chỉ cần ở bước sinh assertion bằng LLM.
+Cần Git và Python 3.11. Docker chỉ cần cho backend mutant dùng container; pipeline local không cần Docker. API key cần khi gọi LLM để sinh assertion hoặc sinh mutant. Xem [hướng dẫn pipeline](docs/DATASET_PIPELINE.md) để chọn đúng backend và phạm vi test.
 
 Các lệnh dưới đây dùng PowerShell trên Windows. Luôn chạy từ thư mục gốc repo:
 

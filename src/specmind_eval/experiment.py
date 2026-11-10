@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import csv
+from collections import Counter
 
 from specmind_eval.evaluate.metrics import mutation_metrics
 from specmind_eval.report import token_usage
@@ -12,7 +13,7 @@ ARMS = {"A": "none", "B": "callee", "C": "caller", "D": "callgraph"}
 
 
 def experiment(config, output, resume=False):
-    from specmind_eval.run import run
+    from specmind_eval.run import run, preflight
     from specmind_eval.context.callgraph import CallGraph
     from specmind_eval.common.git import verify_commit
 
@@ -28,10 +29,18 @@ def experiment(config, output, resume=False):
         common = {k: v for k, v in config.items() if k != "context_mode"}
         if previous and (not resume or previous["config"] != common):
             raise ValueError("Experiment exists; resume requires identical common configuration")
+        # All four context/data gates must pass before any arm can spend model calls.
+        checked={label:preflight({**config,'context_mode':mode},output/'preflight'/label)
+                 for label,mode in ARMS.items()}
+        write(output/'preflight.json',checked)
         if not previous:
             write(marker, {"schema_version": "context-ablation-v1", "config": common, "arms": ARMS})
-        for label, mode in ARMS.items():
-            run({**config, "context_mode": mode}, output / label, resume)
+        from concurrent.futures import ThreadPoolExecutor
+        def arm(item):
+            label, mode = item
+            return run({**config, "context_mode": mode}, output / label, resume)
+        with ThreadPoolExecutor(max_workers=config.get('experiment_workers', 1)) as pool:
+            list(pool.map(arm, ARMS.items()))
         return compare(output)
 
 
@@ -41,12 +50,17 @@ def compare(output, paired=None):
     experiment_manifest = read(output / "experiment.json")
     if not experiment_manifest:
         raise ValueError("Missing experiment.json")
+    expected_config = dict(experiment_manifest['config'])
+    if expected_config.get('prepared_dataset'):
+        from specmind_eval.inputs.prepared import load_prepared_dataset
+        _, _, dataset_manifest = load_prepared_dataset(expected_config['prepared_dataset'], expected_config['repo_root'])
+        expected_config['python_path'] = (dataset_manifest.get('project') or {}).get('python_path')
     manifests, records = {}, {}
     for label, mode in ARMS.items():
         manifest = read(output / label / "manifest.json")
         if manifest:
             common = {k: v for k, v in manifest["config"].items() if k != "context_mode"}
-            if common != experiment_manifest["config"] or manifest["config"]["context_mode"] != mode:
+            if common != expected_config or manifest["config"]["context_mode"] != mode:
                 raise ValueError(f"Incompatible configuration in {label}")
             manifests[label] = manifest
         original_records = read(output / label / 'results.json', [])
@@ -76,6 +90,7 @@ def compare(output, paired=None):
         functions.update(arm)
     if not functions:
         raise ValueError("No functions to compare")
+    generation_origins = Counter()
     rows = []
     for function in sorted(functions):
         bundles, paired_ids, assertion_evaluated = {}, {}, {}
@@ -110,6 +125,9 @@ def compare(output, paired=None):
                 m for m in mutation.get("mutants", []) if m["id"] in common_assertion_ids
             ])
             state = read(output / label / "functions" / digest(function)[:16] / "generation.json", {})
+            for attempt in state.get('attempts',[]):
+                origin=attempt.get('response_origin') or ('cached_response' if attempt.get('usage',{}).get('cached_response') else 'unrecorded')
+                generation_origins[origin]+=1
             row = {
                 "function": function,
                 "config": label,
@@ -147,5 +165,7 @@ def compare(output, paired=None):
         writer.writeheader()
         writer.writerows(rows)
     summary = {"rows": len(rows), "functions": len(functions), "unfinished": sum(not r["done"] for r in rows)}
+    summary['generation_provenance']=dict(generation_origins)
+    summary['all_responses_recorded_live']=bool(generation_origins) and set(generation_origins)=={'live_model'}
     write(destination / "comparison_summary.json", summary)
     return summary

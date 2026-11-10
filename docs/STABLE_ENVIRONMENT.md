@@ -47,20 +47,22 @@ vào thư mục output mới, rồi mới đưa artifact mới vào evaluator.
 Response mutant đã lưu chỉ được tái dùng nếu model, prompt và các thiết lập tương ứng khớp;
 không gọi LLM thêm chỉ để chuyển môi trường.
 
-## Bộ artifact đã kiểm tra
+## Kiểm tra artifact trước khi chạy
 
-Artifact tại `artifacts/stable_runtime_20261109/full22` đã được kiểm tra bằng đúng bộ
-24 test đã chọn: 22 hàm ready, 93 liên kết được giữ sau probe, 255 mutant tái dùng
-với ID/source không đổi. Không có lời gọi LLM mới.
-Loader chuẩn và đọc lại cache trong tiến trình mới đều pass. Kho dữ liệu cũ giữ nguyên.
-Đây là kiểm tra dataset/probe và khả năng nạp corpus; chưa chạy runtime toàn bộ 255 mutant.
+Manifest complete chỉ xác nhận producer hoàn tất phạm vi đầu vào đã chọn; không
+có nghĩa đã chạy toàn bộ test của thư viện. Kiểm tra `test_selection` trong
+candidate manifest và `links/command.json`. Dùng toàn thư mục `tests` khi mục tiêu
+là tìm đầy đủ liên kết; không thay bằng danh sách nodeid pilot hoặc reuse subset.
+
+Chạy lại sang output mới nếu thay dataset/test selection. Mutant source có thể
+được rebind khi source và API ownership không đổi, nhưng kết quả runtime filter
+cũ không được tái dùng. Chạy filter-mutants trên dataset mới rồi validate liên kết:
 
 ```powershell
-.\run-stable.ps1 prep validate `
-  --repo C:\specmind\paper_eval\.cache\clones\marshmallow-code\marshmallow\latest `
-  --candidates artifacts/stable_runtime_20261109/full22/candidates `
-  --links artifacts/stable_runtime_20261109/full22/links `
-  --dataset artifacts/stable_runtime_20261109/full22/dataset `
-  --scope artifacts/stable_runtime_20261109/full22/scope `
-  --mutants artifacts/stable_runtime_20261109/full22/mutants_llm
+.\run-stable.ps1 prep validate --repo <checkout> --candidates <candidates> --links <links> --dataset <dataset> --scope <scope> --mutants <filtered-corpus>
 ```
+
+Đọc `dataset/results.json` để thấy quyết định True/False cho từng nodeid và
+`excluded_mutants.json` để thấy lý do loại từng task-mutant. Source/environment
+fingerprint phải khớp. Slicing chỉ dùng artifact đúng model và đủ task; corpus
+partial không được coi là đầy đủ cho C/D.
