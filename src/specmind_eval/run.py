@@ -7,7 +7,7 @@ import platform
 from pathlib import Path
 from time import perf_counter
 
-from specmind_eval.inputs.dataset import function_code, load, pytest_nodeid, repo_path_for_problem
+from specmind_eval.inputs.dataset import evaluation_key, function_code, load, pytest_nodeid, repo_path_for_problem
 from specmind_eval.context.callgraph import CallGraph, build_context_pack
 from specmind_eval.common.git import verify_commit
 from specmind_eval.evaluate.evaluator import Evaluator
@@ -26,7 +26,13 @@ def run(config, output, resume=False):
         return _run(config, output, resume)
 
 
-def _run(config, output, resume=False):
+def preflight(config, output):
+    """Validate shared data/context inputs without executing pytest or a model."""
+    with run_lock(output):
+        return _run(config, output, preflight_only=True)
+
+
+def _run(config, output, resume=False, *, preflight_only=False):
     output = Path(output).resolve()
     repo = Path(config["repo_root"]).resolve()
     if not repo.is_dir():
@@ -36,7 +42,7 @@ def _run(config, output, resume=False):
     verify_commit(repo, config.get("expected_repo_commit"))
     context_mode = config.get("context_mode", "none")
     graph = None
-    if context_mode != "none":
+    if context_mode not in {"none", "slice"}:
         if not config.get("call_graph_dir"):
             raise ValueError("call_graph_dir is required for enabled context")
         graph = CallGraph.load(Path(config["call_graph_dir"]), repo)
@@ -47,27 +53,40 @@ def _run(config, output, resume=False):
         problems, tests_by_id, dataset_manifest = load_prepared_dataset(config["prepared_dataset"], repo)
         config = dict(config, python_path=(dataset_manifest.get("project") or {}).get("python_path"))
         corpus, corpus_manifest = load_prepared_mutants(config["prepared_mutants"], repo, dataset_manifest)
-        if any((p.get("problem_id") or p["task_id"]) not in corpus for p in problems):
+        if any(evaluation_key(p) not in corpus for p in problems):
             raise ValueError("Prepared corpus missing functions")
     else:
         problems, tests_by_id = load(Path(config["problems"]), Path(config["tests"]))
     if config.get("tasks"):
         wanted = set(config["tasks"])
-        problems = [p for p in problems if (p.get("problem_id") or p["task_id"]) in wanted]
-        found = {p.get("problem_id") or p["task_id"] for p in problems}
+        problems = [p for p in problems if evaluation_key(p) in wanted]
+        found = {evaluation_key(p) for p in problems}
         if found != wanted:
             raise ValueError(f"Unknown task IDs: {sorted(wanted - found)}")
     if not problems:
         raise ValueError("No functions selected")
     packs = {}
+    sliced_callers = None
+    slice_manifest = None
+    if config.get("caller_context") == "slice" and context_mode in {"caller", "callgraph"}:
+        from specmind_eval.context.slicing import load_slice_context
+        if not config.get("slice_context_dir"):
+            raise ValueError("Caller slicing requires slice_context_dir")
+        sliced_callers, slice_manifest = load_slice_context(config["slice_context_dir"], repo, problems, config["context_budget"])
+        for key, pack in sliced_callers.items():
+            if pack["metadata"].get("role") != "caller_slice":
+                raise ValueError("Expected a caller slice, not a target/helper slice: " + key)
+            if pack["metadata"].get("model") != "caller-variable-ddg-v2" or pack["metadata"].get("status") != "complete_supported":
+                raise ValueError("Regenerate caller context from verified DDG criteria: " + key)
+
     if graph:
         for problem in problems:
-            key = str(problem.get("problem_id") or problem["task_id"])
+            key = evaluation_key(problem)
             pack = build_context_pack(
                 graph,
-                key,
-                mode=context_mode,
-                budget=config.get("context_budget", 8000),
+                problem.get('problem_id') or key,
+                mode=("callee" if context_mode == "callgraph" else "none") if sliced_callers is not None else context_mode,
+                budget=config.get("context_budget", 8000) - (len(sliced_callers[key]["repository_context"]) + 1 if sliced_callers is not None else 0),
                 depth=config.get("context_depth", 1),
             )
             status = pack["metadata"]["status"]
@@ -75,16 +94,33 @@ def _run(config, output, resume=False):
                 raise ValueError(f"Context unavailable for {key}: {status}")
             if status == "no_usable_context":
                 neighbors = (
-                    graph.get_callees(key, config.get("context_depth", 1))
-                    if context_mode == "callee"
-                    else graph.get_callers(key, config.get("context_depth", 1))
+                    graph.get_callees(problem.get('problem_id') or key, config.get("context_depth", 1))
+                    if context_mode == "callee" or sliced_callers is not None
+                    else graph.get_callers(problem.get('problem_id') or key, config.get("context_depth", 1))
                 )
-                if context_mode == "callgraph":
-                    neighbors += graph.get_callees(key, config.get("context_depth", 1))
+                if context_mode == "callgraph" and sliced_callers is None:
+                    neighbors += graph.get_callees(problem.get('problem_id') or key, config.get("context_depth", 1))
                 if neighbors:
                     raise ValueError(f"No usable snippets for {key}; inspect budget/source")
                 pack["metadata"]["status"] = "no_neighbors"
             packs[key] = pack
+    if sliced_callers is not None:
+        for key, caller_pack in sliced_callers.items():
+            pack = packs[key]
+            pack["repository_context"] += "\n" + caller_pack["repository_context"]
+            if len(pack["repository_context"]) > config["context_budget"]:
+                raise ValueError("Combined callee/caller slice context exceeds budget: " + key)
+            pack["metadata"].update(status="caller_slice", actual_chars=len(pack["repository_context"]))
+    if context_mode == "slice":
+        from specmind_eval.context.slicing import load_slice_context
+        if not config.get("slice_context_dir"):
+            raise ValueError("slice_context_dir is required")
+        packs, slice_manifest = load_slice_context(config["slice_context_dir"], repo, problems, config["context_budget"])
+    if preflight_only:
+        result={'status':'inputs_valid','functions':len(problems),'context_mode':context_mode,
+                'prepared_dataset':bool(corpus is not None),'model_calls':0,'pytest_runs':0}
+        write(output/'preflight.json',result)
+        return result
     environment = {
         "python": platform.python_version(),
         "platform": platform.platform(),
@@ -103,7 +139,7 @@ def _run(config, output, resume=False):
             "engine": engine_digest(),
             "environment": environment,
             "export_bundle": corpus_manifest if corpus is not None else export_bundle_digest(config),
-            "context": {"packs": packs, "manifest": graph.manifest_sha256} if graph else None,
+            "context": {"packs": packs, "manifest": graph.manifest_sha256 if graph else slice_manifest, "caller_slice_manifest": slice_manifest},
         }
     )
     comparison_fingerprint = digest(
@@ -139,7 +175,7 @@ def _run(config, output, resume=False):
         )
     identity = evaluation_identity(repo, config)
     for index, problem in enumerate(problems, 1):
-        key = str(problem.get("problem_id") or problem["task_id"])
+        key = evaluation_key(problem)
         directory = output / "functions" / digest(key)[:16]
         result_path = directory / "result.json"
         existing = read(result_path)

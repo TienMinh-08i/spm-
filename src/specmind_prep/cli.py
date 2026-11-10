@@ -41,8 +41,22 @@ def build_parser():
     tracing.add_argument("--target", required=True, help="Top-level function ID; initial primitive-local model")
     tracing.add_argument("--caller", help="Optional selected top-level package caller; primitive actual/formal links")
     tracing.add_argument("--readonly-helpers", nargs="*", help="Read-only expression mode with explicit helper IDs")
+    tracing.add_argument("--heap",action="store_true",help="Opt-in exact dict/list heap caller model")
     tracing.add_argument("--timeout", type=float, default=60)
     tracing.add_argument("--max-events", type=int, default=20000)
+    pipeline = sub.add_parser('slicing-pipeline', help='Automatic caller selection, heap trace, criteria, DDG/RDDG and context')
+    for name in ('dataset','repo','project','output'):
+        pipeline.add_argument('--'+name,type=path,required=True)
+    pipeline.add_argument('--preflight-only',action='store_true')
+    pipeline.add_argument('--max-tests',type=int,default=1)
+    pipeline.add_argument('--timeout',type=float,default=60)
+    caller = sub.add_parser('caller-slice-context', help='Export verified backward caller variable DDG slices')
+    for name in ('dataset','repo','project','output'):
+        caller.add_argument('--'+name,type=path,required=True)
+    caller.add_argument('--criteria',type=path,required=True)
+    context = sub.add_parser('slice-context', help='Prepare validated backward slice context for evaluation')
+    for name in ('spec','repo','output'):
+        context.add_argument('--'+name,type=path,required=True)
     slicing = sub.add_parser("slice-call", help="Backward variable query on an existing occurrence-based DDG")
     for name in ("repo", "trace", "output"):
         slicing.add_argument("--" + name, type=path, required=True)
@@ -50,6 +64,10 @@ def build_parser():
     slicing.add_argument("--variable", required=True)
     slicing.add_argument("--when", choices=["before", "after"], default="before")
     slicing.add_argument("--direction", choices=["backward"], default="backward")
+    audit = sub.add_parser("public-api-callers", help="Inventory documented public APIs and scan source/test calls")
+    for name in ("repo", "project", "output"):
+        audit.add_argument("--" + name, type=path, required=True)
+    audit.add_argument("--api-index", default="api_reference.rst")
     docs = sub.add_parser("build-docs", help="Step 0: build HTML docs at project.commit in a separate checkout/venv")
     docs.add_argument("--project", type=path, required=True, help="Project config with commit, docs_dir, docs_build")
     docs.add_argument("--source", type=path, required=True, help="Local git repo to clone from (read-only)")
@@ -65,6 +83,7 @@ def build_parser():
         selection.add_argument('--'+name, type=path, required=True)
     selection.add_argument('--review-id', action='append', default=[])
     selection.add_argument('--test', action='append')
+    selection.add_argument('--eligibility', type=path, help='Explicit Step 1 inclusion/exclusion review')
     llm = sub.add_parser('llm-mutants', help='Step 7: explicit cached LLM preparation, separate from evaluation')
     for name in ('scope', 'dataset', 'repo', 'output'):
         llm.add_argument('--'+name, type=path, required=True)
@@ -73,6 +92,32 @@ def build_parser():
     llm.add_argument('--max-targets', type=int, default=2)
     llm.add_argument('--count', type=int, default=10)
     llm.add_argument('--reuse-from', type=path)
+    pool = sub.add_parser('llm-target-pool', help='Generate unique candidate targets; does not claim dataset readiness')
+    for name in ('candidates', 'repo', 'output'):
+        pool.add_argument('--'+name, type=path, required=True)
+    pool.add_argument('--model', required=True)
+    pool.add_argument('--reuse-from', type=path)
+    pool.add_argument('--max-new-requests', type=int, default=0)
+    pool.add_argument('--new-max-tokens', type=int, default=32768)
+    pool.add_argument('--target', action='append', help='Generate only the named analysis target')
+    bind = sub.add_parser('bind-llm-pools', help='Bind source pools to a ready task scope as M2')
+    for name in ('scope','dataset','repo','output'):
+        bind.add_argument('--'+name,type=path,required=True)
+    bind.add_argument('--pool',type=path,action='append',required=True)
+    local = sub.add_parser('mutmut-local', help='Generate M1 using pinned local mutmut source operators; no Docker')
+    for name in ('scope','repo','output','vendor'):
+        local.add_argument('--'+name,type=path,required=True)
+    local.add_argument('--timeout',type=int,default=120)
+    rebind = sub.add_parser('rebind-mutants',help='Bind unchanged source corpus to new tests; invalidate old runtime evidence')
+    for name in ('source','old-dataset','dataset','scope','repo','output'):
+        rebind.add_argument('--'+name,type=path,required=True)
+    filt = sub.add_parser('filter-mutants', help='Offline assert True filtering of each task-mutant link')
+    for name in ('dataset','mutants','repo','output'):
+        filt.add_argument('--'+name,type=path,required=True)
+    filt.add_argument('--timeout',type=int,default=120)
+    filt.add_argument('--workers',type=int,default=4)
+    filt.add_argument('--batch-size',type=int,default=500)
+    filt.add_argument('--resume',action='store_true')
     refs = sub.add_parser("references", help="Locate a function and inspect static caller references; no execution")
     refs.add_argument("--repo", type=path, required=True)
     refs.add_argument("--project", type=path, required=True)
@@ -111,6 +156,7 @@ def build_parser():
     trace.add_argument('--exclude-config',type=path)
     trace.add_argument('--timeout',type=int,default=1800)
     trace.add_argument('--resume',action='store_true')
+    trace.add_argument('--reuse-from',type=path,help='Verified bundle containing candidates/ and links/')
     prep = sub.add_parser(
         "dataset", aliases=["prepare"], help="Offline assert True then assert False filtering"
     )
@@ -125,6 +171,7 @@ def build_parser():
     prep.add_argument("--batch-size", type=int, default=500)
     prep.add_argument("--resume", action="store_true")
     prep.add_argument("--force", action="store_true")
+    prep.add_argument('--reuse-from',type=path,help='Prepared dataset with compatible unchanged keep tasks')
     scope = sub.add_parser(
         "scope", help="Choose exactly the function itself as mutation target; no test rerun"
     )
@@ -189,9 +236,19 @@ def main(argv=None):
                 max_events=args.max_events,
                 caller=args.caller,
                 readonly_helpers=args.readonly_helpers,
+                heap=args.heap,
             )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["status"] == "complete_supported" else 2
+        elif args.command == 'slicing-pipeline':
+            from specmind_prep.slicing_pipeline import prepare
+            result = prepare(args.dataset,args.repo,args.project,args.output,preflight_only=args.preflight_only,max_tests=args.max_tests,timeout=args.timeout)
+        elif args.command == 'caller-slice-context':
+            from specmind_prep.caller_context import prepare
+            result = {'tasks':len(prepare(args.dataset,args.repo,args.project,args.output,args.criteria))}
+        elif args.command == 'slice-context':
+            from specmind_prep.slice_context import prepare_context
+            result = prepare_context(args.spec,args.repo,args.output)
         elif args.command == "slice-call":
             from specmind_prep.slicing import query_slice
             from specmind_eval.common.outputs import separate_output
@@ -204,6 +261,11 @@ def main(argv=None):
                 stream.write("\n")
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 0 if result["status"] == "complete_supported" else 2
+        elif args.command == "public-api-callers":
+            from specmind_prep.project import load_project
+            from specmind_prep.public_api import analyze
+            project = load_project(args.project, args.repo, documented_only=True)
+            result = analyze(args.repo, project, args.output, api_index=args.api_index)
         elif args.command == "build-docs":
             from specmind_prep.docs_build import build_docs
             result = build_docs(args.project, args.source, args.workdir, args.output,
@@ -216,7 +278,26 @@ def main(argv=None):
         elif args.command == 'validate-selection':
             from specmind_prep.selection import prepare_selection
             result = prepare_selection(args.repo, args.project, args.docs, args.selection, args.output,
-                                       review_ids=args.review_id, tests=args.test)
+                                       review_ids=args.review_id, tests=args.test, eligibility_path=args.eligibility)
+        elif args.command == 'rebind-mutants':
+            from specmind_prep.mutant_rebind import rebind_mutants
+            result=rebind_mutants(args.source,args.old_dataset,args.dataset,args.scope,args.repo,args.output)
+        elif args.command == 'filter-mutants':
+            from specmind_prep.mutant_filter import filter_mutants
+            result = filter_mutants(args.dataset,args.mutants,args.repo,args.output,
+                                    timeout=args.timeout,workers=args.workers,resume=args.resume,batch_size=args.batch_size)
+        elif args.command == 'bind-llm-pools':
+            from specmind_prep.mutant_corpus import bind_pools
+            result = bind_pools(args.scope,args.dataset,args.repo,args.pool,args.output)
+        elif args.command == 'mutmut-local':
+            from specmind_prep.scope.scope import load_scope
+            from specmind_prep.prototype import local_mutants
+            result = local_mutants(load_scope(args.scope,args.repo),args.repo,args.output,args.vendor,args.timeout)
+        elif args.command == 'llm-target-pool':
+            from specmind_prep.llm_mutants import prepare_pool
+            result = prepare_pool(args.candidates, args.repo, args.output, args.model,
+                                  reuse_from=args.reuse_from, max_new_requests=args.max_new_requests,
+                                  new_max_tokens=args.new_max_tokens,target_ids=args.target)
         elif args.command == 'llm-mutants':
             from specmind_prep.llm_mutants import prepare
             result = prepare(args.scope, args.dataset, args.repo, args.output, args.model, count=args.count,
@@ -275,7 +356,8 @@ def main(argv=None):
             from specmind_prep.trace.trace import trace
             excluded=read(args.exclude_config) if args.exclude_config else []
             if args.exclude_config and not args.exclude_config.is_file():raise ValueError('Exclusion config file not found: '+str(args.exclude_config))
-            result=trace(args.candidates,args.repo,args.output,tests=args.test,exclude=excluded,timeout=args.timeout,resume=args.resume)
+            result=trace(args.candidates,args.repo,args.output,tests=args.test,exclude=excluded,timeout=args.timeout,
+                         resume=args.resume,reuse_from=args.reuse_from)
         elif args.command == "extract":
             from specmind_prep.extract.extract import extract
 
@@ -306,7 +388,8 @@ def main(argv=None):
                 if not args.links:raise ValueError('--candidates requires --links')
                 from specmind_prep.filter.dataset import prepare_linked_dataset
                 result=prepare_linked_dataset(args.candidates,args.links,args.repo,args.output,resume=args.resume,
-                                              tasks=args.task,timeout=args.timeout,batch_size=args.batch_size,force=args.force)
+                                              tasks=args.task,timeout=args.timeout,batch_size=args.batch_size,force=args.force,
+                                              reuse_from=args.reuse_from)
             else:
                 m = check_raw(args.raw)
                 if path(m["repo"]) != args.repo:

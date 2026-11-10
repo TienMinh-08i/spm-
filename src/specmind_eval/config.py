@@ -17,12 +17,15 @@ DEFAULTS = {
     "mutmut_timeout": 1800,
     "path_mappings": {},
     "context_mode": "none",
+    "caller_context": "full",
     "context_budget": 8000,
     "context_depth": 1,
+    "experiment_workers": 1,
     "generate_without_mutants": False,
     "negative_control": False,
     "assertion_policy": "behavioral",
     "evaluation_retry_limit": 2,
+    "state_attributes": {},
 }
 
 
@@ -41,17 +44,22 @@ def load_config(config_path, parser):
         "mock_assertion",
         "project",
         "call_graph_dir",
+        "slice_context_dir",
         "expected_repo_commit",
     }
     unknown = set(supplied) - allowed
     if unknown:
         parser.error(f"Unknown config keys: {sorted(unknown)}")
     config = {**DEFAULTS, **supplied}
+    if (not isinstance(config['state_attributes'], dict)
+            or any(not isinstance(k,str) or not isinstance(v,list) or any(not isinstance(a,str) for a in v)
+                   for k,v in config['state_attributes'].items())):
+        parser.error('state_attributes must map analysis target IDs to lists of attribute names')
     required = ("repo_root", "prepared_dataset", "prepared_mutants") if config.get("prepared_dataset") or config.get("prepared_mutants") else ("problems", "tests", "repo_root")
     for key in required:
         if not config.get(key):
             parser.error(f"Missing config key: {key}")
-    for key in ("problems", "tests", "repo_root", "reuse_mutmut_rows", "call_graph_dir", "prepared_dataset", "prepared_mutants"):
+    for key in ("problems", "tests", "repo_root", "reuse_mutmut_rows", "call_graph_dir", "slice_context_dir", "prepared_dataset", "prepared_mutants"):
         if config.get(key):
             path = Path(config[key])
             config[key] = str(
@@ -61,13 +69,17 @@ def load_config(config_path, parser):
         parser.error("mode must be multiturn or retry")
     if config['assertion_policy'] not in {'legacy', 'behavioral'}:
         parser.error('assertion_policy must be legacy or behavioral')
-    if config["context_mode"] not in {"none", "callee", "caller", "callgraph"}:
+    if config["caller_context"] not in {"full", "slice"}:
+        parser.error("caller_context must be full or slice")
+    if config["context_mode"] not in {"none", "callee", "caller", "callgraph", "slice"}:
         parser.error("Invalid context_mode")
     if config["context_budget"] < 1 or config["context_depth"] < 1:
         parser.error("Context budget and depth must be positive")
     for key in ("generate_without_mutants", "negative_control"):
         if not isinstance(config[key], bool):
             parser.error(f"{key} must be boolean")
+    if type(config["experiment_workers"]) is not int or not 1 <= config["experiment_workers"] <= 4:
+        parser.error("experiment_workers must be between 1 and 4")
     if config["max_turns"] < 1 or config["batch_size"] < 1 or not 0 <= config["threshold"] <= 1:
         parser.error("Invalid turn count, batch size, or threshold")
     for key in ("pytest_timeout", "api_timeout", "mutmut_timeout", "api_retries", "evaluation_retry_limit"):
