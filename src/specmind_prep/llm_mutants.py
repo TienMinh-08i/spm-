@@ -87,6 +87,91 @@ def filter_response(source, content, count):
 
 
 def prepare(scope, dataset, repo, output, model, count=10, call=request, max_targets=2, reuse_from=None, method='function'):
+    scope, dataset, repo = [Path(p).resolve() for p in (scope, dataset, repo)]
+    output = separate_output(output, scope, dataset, repo)
+    rows, targets, parent = load_scope(scope, repo)
+    _, _, dm = load_prepared_dataset(dataset, repo)
+    if parent['dataset_fingerprint'] != dm['fingerprint'] or parent['dataset_files'] != dm['files']:
+        raise ValueError('Scope does not belong to this dataset')
+    return _generate(rows, targets, parent, dm, repo, output, model, count, call, max_targets, reuse_from, method)
+
+
+def prepare_pool(candidates, repo, output, model, *, reuse_from=None, max_new_requests=0,
+                 new_max_tokens=32768, call=request, target_ids=None):
+    """Generate unique source targets before probing; never claim dataset readiness."""
+    from specmind_prep.gather.gather import validate_candidates
+    from specmind_prep.source_index import source_index
+    from specmind_eval.common.jsonl import read_jsonl
+
+    candidates, repo = Path(candidates).resolve(), Path(repo).resolve()
+    output = separate_output(output, candidates, repo)
+    parent = validate_candidates(candidates, repo)
+    tasks = read_jsonl(candidates/'problems.jsonl')
+    if target_ids:
+        wanted = set(target_ids)
+        tasks = [p for p in tasks if p['problem_id'] in wanted]
+        if {p['problem_id'] for p in tasks} != wanted:
+            raise ValueError('Unknown source-pool targets')
+    index, _ = source_index(repo, parent['project'])
+    keep = {p['problem_id']: p for p in tasks if p.get('decision') == 'keep'}
+    targets = []
+    for key in sorted({p['problem_id'] for p in tasks}):
+        if key not in index:
+            raise ValueError('Analysis target missing from source: '+key)
+        target = dict(index[key], docstring=ast.get_docstring(ast.parse(index[key]['source']).body[0], clean=False))
+        # Use the target's own public documentation when available, never an
+        # arbitrary delegating API's contract for a shared helper.
+        if key in keep:
+            target['document'] = keep[key].get('document')
+        targets.append(target)
+    bindings = [{'task_id': p['task_id'], 'function_id': p['function_id'],
+                 'problem_id': p['problem_id'], 'decision': p['decision']} for p in tasks]
+    if len({p['task_id'] for p in bindings}) != len(bindings):
+        raise ValueError('Duplicate API task identity')
+    rows = [{'mutation_targets': [{'target': p['problem_id'], 'kind': 'self'}]} for p in targets]
+    return _generate(rows, targets, parent, None, repo, output, model, 10, call, 22, reuse_from, 'line',
+                     bindings=bindings, candidates=candidates, max_new_requests=max_new_requests,
+                     new_max_tokens=new_max_tokens)
+
+
+def load_target_pool(output, repo, candidates=None):
+    """Read a source pool. This is deliberately not a prepared evaluation corpus."""
+    from specmind_eval.common.fingerprint import require_source_environment
+
+    output, repo = Path(output).resolve(), Path(repo).resolve()
+    manifest = read(output/'manifest.json', {})
+    if manifest.get('schema') != 'llm-target-pool-v1' or not manifest.get('complete'):
+        raise ValueError('Target pool missing or incomplete')
+    required = {'targets_input.json', 'task_bindings.json', 'functions.json', 'summary.json',
+                'exports.json', 'checkpoints.json'}
+    if not required <= manifest.get('files', {}).keys():
+        raise ValueError('Target pool missing required hashes')
+    for name, expected in manifest['files'].items():
+        if Path(name).name != name or file_hash(output/name) != expected:
+            raise ValueError('Target pool artifact mismatch: '+name)
+    require_source_environment(manifest['source_environment'], source_environment(repo), 'Target pool')
+    if candidates is not None:
+        from specmind_prep.gather.gather import validate_candidates
+        parent = validate_candidates(candidates, repo)
+        if (parent['fingerprint'] != manifest['candidate_fingerprint']
+                or parent['files'] != manifest['candidate_files']):
+            raise ValueError('Pool does not belong to these candidates')
+    functions = read(output/'functions.json')
+    keys = [f['function'] for f in functions]
+    targets = read(output/'targets_input.json')
+    bindings = read(output/'task_bindings.json')
+    if (len(keys) != len(set(keys)) or set(keys) != {p['problem_id'] for p in targets}
+            or {b['problem_id'] for b in bindings} != set(keys)
+            or len({b['task_id'] for b in bindings}) != len(bindings)):
+        raise ValueError('Target pool task/target identity mismatch')
+    for row in functions:
+        if not row.get('done') or any(m['mutation_target'] != row['function'] for m in row['mutants']):
+            raise ValueError('Target pool mutant ownership mismatch')
+    return {f['function']: f for f in functions}, bindings, manifest
+
+
+def _generate(rows, targets, parent, dm, repo, output, model, count, call, max_targets, reuse_from, method,
+              *, bindings=None, candidates=None, max_new_requests=None, new_max_tokens=None):
     if not model or not 1 <= count <= 10:
         raise ValueError('Explicit model and count between 1 and 10 required')
     if method not in {'function', 'line'}:
@@ -99,12 +184,6 @@ def prepare(scope, dataset, repo, output, model, count=10, call=request, max_tar
                     'module_sha256': file_hash(line_mutants.__file__),
                     'system_prompt': line_mutants.SYSTEM_PROMPT, 'user_template': line_mutants.USER_TEMPLATE,
                     'alternatives_per_line': 5}
-    scope, dataset, repo = [Path(p).resolve() for p in (scope, dataset, repo)]
-    output = separate_output(output, scope, dataset, repo)
-    rows, targets, parent = load_scope(scope, repo)
-    _, _, dm = load_prepared_dataset(dataset, repo)
-    if parent['dataset_fingerprint'] != dm['fingerprint'] or parent['dataset_files'] != dm['files']:
-        raise ValueError('Scope does not belong to this dataset')
     if not isinstance(max_targets, int) or not 1 <= max_targets <= 22:
         raise ValueError('max_targets must be between 1 and 22')
     if not 1 <= len(targets) <= max_targets or any(len(r['mutation_targets']) != 1 or r['mutation_targets'][0]['kind'] != 'self' for r in rows):
@@ -119,31 +198,66 @@ def prepare(scope, dataset, repo, output, model, count=10, call=request, max_tar
         for name, expected in reuse_manifest.get('files', {}).items():
             if Path(name).name != name or file_hash(reuse_from/name) != expected:
                 raise ValueError('Reuse artifact hash mismatch')
+    if max_new_requests is not None and (type(max_new_requests) is not int or max_new_requests < 0):
+        raise ValueError('max_new_requests must be a nonnegative integer')
+    if new_max_tokens is not None and (type(new_max_tokens) is not int or new_max_tokens < max_tokens):
+        raise ValueError('new_max_tokens must be at least the standard token budget')
+    token_limits, planned = {}, []
+    for target in targets:
+        key, slug = target['problem_id'], digest(target['problem_id'])[:16]
+        prompt = messages(target, count) if method == 'function' else line_mutants.messages(target)
+        previous_request = read(reuse_from/(slug+'.request.json'), {}) if reuse_manifest else {}
+        reusable = (reuse_manifest and slug+'.request.json' in reuse_manifest['files']
+                    and slug+'.response.json' in reuse_manifest['files']
+                    and previous_request.get('model') == model and previous_request.get('messages') == prompt
+                    and previous_request.get('temperature') == temperature
+                    and previous_request.get('max_tokens') == max_tokens)
+        token_limits[key] = max_tokens if reusable else (new_max_tokens or max_tokens)
+        if not reusable and not (output/(slug+'.request.json')).exists() and not (output/(slug+'.response.json')).exists():
+            planned.append(key)
+    if max_new_requests is not None and len(planned) > max_new_requests:
+        raise ValueError(f'Would require {len(planned)} new requests, exceeding budget {max_new_requests}; '
+                         'no paid request made')
     identity = digest({'scope': parent['fingerprint'], 'scope_files': parent['files'],
                        'model': model, 'count': count if method == 'function' else None,
                        'system': SYSTEM if method == 'function' else protocol,
                        'method': method, 'max_tokens': max_tokens, 'temperature': temperature,
+                       'token_limits': token_limits, 'max_new_requests': max_new_requests,
                        'code': file_hash(__file__)})
     with run_lock(output):
         previous = read(output/'manifest.json')
         if previous and previous.get('fingerprint') != identity:
             raise ValueError('LLM settings changed; choose a new output directory')
         if previous and previous.get('complete'):
-            load_prepared_mutants(output, repo, dm)
+            if dm is None:
+                load_target_pool(output, repo, candidates)
+            else:
+                load_prepared_mutants(output, repo, dm)
             return read(output/'summary.json')
         manifest = {'schema': 'prepared-mutants-v1', 'complete': False, 'fingerprint': identity,
                     'generator': 'llm', 'model': model, 'count_requested_per_function': count if method == 'function' else None,
                     'mutation_method': method, 'protocol': protocol,
                     'max_tokens': max_tokens, 'temperature': temperature,
-                    'dataset_fingerprint': dm['fingerprint'], 'dataset_files': dm['files'],
+                    'dataset_fingerprint': dm['fingerprint'] if dm else None,
+                    'dataset_files': dm['files'] if dm else None,
                     'scope_fingerprint': parent['fingerprint'], 'scope_files': parent['files'],
                     'source_environment': source_environment(repo), 'project': parent['project']}
+        if dm is None:
+            manifest.update(schema='llm-target-pool-v1', dataset_ready=False,
+                            candidate_fingerprint=parent['fingerprint'], candidate_files=parent['files'],
+                            token_limits=token_limits, max_new_requests=max_new_requests)
+            for field in ('dataset_fingerprint', 'dataset_files', 'scope_fingerprint', 'scope_files'):
+                manifest.pop(field)
         write(output/'manifest.json', manifest)
         write(output/'targets_input.json', targets)
         functions, all_exports, files = [], {}, ['targets_input.json', 'functions.json', 'summary.json', 'exports.json', 'checkpoints.json']
+        if bindings is not None:
+            write(output/'task_bindings.json', bindings)
+            files.append('task_bindings.json')
         new_requests, reused, checkpoints = 0, [], {}
         for target in targets:
             key = target['problem_id']; slug = digest(key)[:16]
+            target_tokens = token_limits[key]
             checkpoints[key] = {'status': 'running'}
             write(output/'checkpoints.json', checkpoints)
             try:
@@ -153,7 +267,7 @@ def prepare(scope, dataset, repo, output, model, count=10, call=request, max_tar
                 if raw is None and not prompt_path.exists() and reuse_manifest:
                     old_prompt = read(reuse_from/prompt_path.name, {})
                     if (old_prompt.get('model') == model and old_prompt.get('messages') == prompt
-                            and old_prompt.get('max_tokens') == max_tokens
+                            and old_prompt.get('max_tokens') == target_tokens
                             and old_prompt.get('temperature') == temperature
                             and raw_path.name in reuse_manifest['files'] and prompt_path.name in reuse_manifest['files']):
                         shutil.copy2(reuse_from/prompt_path.name, prompt_path)
@@ -167,12 +281,12 @@ def prepare(scope, dataset, repo, output, model, count=10, call=request, max_tar
                 if raw is None:
                     if prompt_path.exists():
                         raise ValueError('Previous request has no saved response. Inspect before making another paid request: '+str(prompt_path))
-                    write(prompt_path, {'model': model, 'messages': prompt, 'max_tokens': max_tokens,
+                    write(prompt_path, {'model': model, 'messages': prompt, 'max_tokens': target_tokens,
                                         'temperature': temperature, 'mutation_method': method,
                                         'timeout': 120, 'max_retries': 0, 'status': 'request_started'})
                     print('LLM request: '+key, flush=True)
                     new_requests += 1
-                    raw = (request(prompt, model, temperature=temperature, max_tokens=max_tokens)
+                    raw = (request(prompt, model, temperature=temperature, max_tokens=target_tokens)
                            if call is request else call(prompt, model))
                     write(raw_path, raw)  # Paid output persisted before parsing.
                 choice = raw['choices'][0]
@@ -186,7 +300,8 @@ def prepare(scope, dataset, repo, output, model, count=10, call=request, max_tar
                 all_exports[key] = exported
                 problem = dict(target, _expected_source=target['source'], _expected_source_path=str(repo/target['repo_path']))
                 mutants = [dict(m, id=key+'::llm::'+m['id'], engine_id=m['id'], mutation_target=key,
-                                kind='self', coverage='observed', mutation_problem=problem) for m in exported['mutants']]
+                                kind='self', coverage='not_probed' if dm is None else 'observed',
+                                mutation_problem=problem) for m in exported['mutants']]
                 functions.append({'function': key, 'done': True, 'pending_targets': [], 'expansion': False, 'mutants': mutants})
                 files.extend([raw_path.name, prompt_path.name])
                 checkpoints[key] = {'status': 'complete', 'mutants': len(mutants),
@@ -207,6 +322,8 @@ def prepare(scope, dataset, repo, output, model, count=10, call=request, max_tar
                    'skipped': sum(len(r['skipped']) for r in all_exports.values()), 'executed_mutants': 0}
         summary.update(new_requests_this_execution=new_requests, reused_functions_this_execution=reused,
                        pending_targets=[k for k, v in checkpoints.items() if v['status'] != 'complete'])
+        if bindings is not None:
+            summary.update(api_tasks=len(bindings), unique_targets=len(targets), dataset_ready=False)
         if method == 'line':
             summary['line_coverage'] = {key: row['coverage'] for key,row in all_exports.items()}
             manifest['count_requested_per_function'] = None
@@ -218,7 +335,10 @@ def prepare(scope, dataset, repo, output, model, count=10, call=request, max_tar
             raise ValueError('LLM preparation incomplete; inspect checkpoints.json; no automatic paid retry')
         manifest.update(complete=True, files={n: file_hash(output/n) for n in files})
         write(output/'manifest.json', manifest)
-        load_prepared_mutants(output, repo, dm)
+        if dm is None:
+            load_target_pool(output, repo, candidates)
+        else:
+            load_prepared_mutants(output, repo, dm)
         return summary
 
 

@@ -10,7 +10,7 @@ from specmind_eval.common.fingerprint import digest, file_hash
 from specmind_eval.common.outputs import separate_output
 from specmind_eval.common.storage import write
 from specmind_eval.evaluate.evaluator import Evaluator
-from specmind_eval.inputs.dataset import pytest_nodeid
+from specmind_eval.inputs.dataset import pytest_nodeid, evaluation_key
 from specmind_eval.inputs.prepared import load_prepared_dataset, load_prepared_mutants
 
 
@@ -35,7 +35,7 @@ def replay(dataset, mutants, repo, output, function, *, mutant_id=None, nodeid=N
     output = separate_output(output, dataset, mutants, repo)
     problems, tests, dm = load_prepared_dataset(dataset, repo)
     corpus, mm = load_prepared_mutants(mutants, repo, dm)
-    problem = next((p for p in problems if p['problem_id'] == function), None)
+    problem = next((p for p in problems if evaluation_key(p) == function), None)
     if problem is None or function not in corpus:
         raise ValueError('Unknown prepared function: '+function)
     pool = corpus[function]['mutants']

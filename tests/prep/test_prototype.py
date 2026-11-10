@@ -10,8 +10,8 @@ def test_html_sections_do_not_mix_siblings():
 
 
 @pytest.mark.parametrize('selection,message', [
-    ([{'function_id': 'p.f', 'decision': 'delegate', 'reason': 'x'}], 'keep/drop'),
-    ([{'function_id': 'p.f', 'decision': 'keep', 'reason': ''}], 'reason'),
+    ([{'function_id': 'p.f', 'decision': 'delegate', 'reason': 'x'}], 'Delegate target'),
+    ([{'function_id': 'p.f', 'decision': 'drop', 'reason': ''}], 'reason'),
     ([{'function_id': 'p.missing', 'decision': 'keep', 'reason': 'x'}], 'Unknown'),
     ([{'function_id': 'p.f', 'decision': 'keep', 'reason': 'x'}]*2, 'Duplicate'),
 ])

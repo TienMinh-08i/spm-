@@ -64,17 +64,19 @@ def local_mutants(scope, repo, output, vendor, timeout):
         subprocess.run(command, env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=timeout)
     exports = read(output/'exports.json')
     functions = []
-    for target, row in zip(targets, rows):
+    by_target = {p['problem_id']:p for p in targets}
+    for row in rows:
+        target = by_target[row['mutation_targets'][0]['target']]
         key = target['problem_id']
         problem = dict(target, _expected_source=target['source'],
                        _expected_source_path=str(repo/target['repo_path']))
         mutants = [dict(m, id=key+'::'+m['id'], engine_id=m['id'], mutation_target=key,
-                        kind='self', coverage='observed', mutation_problem=problem)
+                        kind='self', method='M1', coverage='observed', mutation_problem=problem)
                    for m in exports[key]['mutants']]
-        functions.append({'function': key, 'done': True, 'pending_targets': [],
+        functions.append({'function': row['assertion_target'], 'done': True, 'pending_targets': [],
                           'expansion': False, 'scope': row, 'mutants': mutants})
     write(output/'functions.json', functions)
-    summary = {'functions': len(functions), 'unique_mutants': sum(len(r['mutants']) for r in functions),
+    summary = {'functions': len(functions), 'unique_mutants': len({m['id'] for r in functions for m in r['mutants']}),
                'per_function': {r['function']: len(r['mutants']) for r in functions},
                'generator': manifest['generator'], 'executed_mutants': 0,
                'meaning': 'Prepared source mutations, not assertion kills or semantic inequivalence proof.'}
@@ -122,13 +124,14 @@ def run(config_path):
                               'meaning': 'RST proposals checked against built HTML; review list supplied explicitly'}
         from specmind_prep.selection import prepare_selection
         by_id = {r['function_id']: r for r in rows}
-        full_selection = [dict(by_id.get(r['function_id'], {}), **r, target=None) for r in cfg['selection']]
+        full_selection = [{**by_id.get(r['function_id'], {}), 'target': None, **r} for r in cfg['selection']]
         write_jsonl(output/'api_selection.jsonl', full_selection)
         report['steps']['2'] = {'status': 'sample_selected', 'rows': len(full_selection),
                                 'author': 'explicit configured decisions'}
         directory = output/'candidates'
         prepare_selection(repo, path('project'), docs, output/'api_selection.jsonl', directory,
-                          review_ids=cfg.get('review_ids', []), tests=tests, limit=cfg.get('selection_limit', 5))
+                          review_ids=cfg.get('review_ids', []), tests=tests, limit=cfg.get('selection_limit', 5),
+                          require_complete=False)
         candidates = read_jsonl(directory/'problems.jsonl')
         validate_candidates(directory, repo)
         report['steps']['3'] = {'status': 'complete', 'candidates': len(candidates)}
