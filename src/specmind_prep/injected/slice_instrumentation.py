@@ -16,7 +16,7 @@ class Unsupported(ValueError):
     pass
 
 
-def analyze(source, function_line, filename, *, call_names=()):
+def analyze(source, function_line, filename, *, call_names=(), heap=False):
     tree = ast.parse(source, filename=filename)
     matches = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.lineno == function_line]
     if len(matches) != 1:
@@ -101,6 +101,24 @@ def analyze(source, function_line, filename, *, call_names=()):
         elif isinstance(node, ast.Name):
             if node.id not in locals_ or not isinstance(node.ctx, ast.Load):
                 raise Unsupported("Global/free variable read is outside the local model: " + node.id)
+        elif heap and isinstance(node, ast.Subscript):
+            if not isinstance(node.ctx, ast.Load) or isinstance(node.slice, ast.Slice):
+                raise Unsupported("Only heap item reads are modeled")
+            expression(node.value)
+            expression(node.slice)
+            site = f"{node.lineno}:{node.col_offset}:heap_read"
+            sites[site] = {"file":filename,"line":node.lineno,"column":node.col_offset+1,
+                          "source":ast.get_source_segment(source,node),"kind":"heap_read","statement":owner_site}
+        elif heap and isinstance(node, (ast.Dict, ast.List)):
+            if isinstance(node, ast.Dict):
+                if any(k is None for k in node.keys):raise Unsupported("Dict unpacking not modeled")
+                for key in node.keys:expression(key)
+                values=node.values
+            else:values=node.elts
+            for value in values:expression(value)
+            site = f"{node.lineno}:{node.col_offset}:heap_origin"
+            sites[site] = {"file":filename,"line":node.lineno,"column":node.col_offset+1,
+                          "source":ast.get_source_segment(source,node),"kind":"heap_origin","statement":owner_site}
         elif isinstance(node, ast.BinOp):
             expression(node.left)
             expression(node.right)
@@ -188,7 +206,12 @@ def analyze(source, function_line, filename, *, call_names=()):
                 "statement": site,
             }
             if isinstance(node, ast.Assign):
-                if not all(isinstance(t, ast.Name) for t in node.targets):
+                if heap and len(node.targets)==1 and isinstance(node.targets[0],ast.Subscript):
+                    target=node.targets[0]
+                    if isinstance(target.slice,ast.Slice):raise Unsupported("Heap slices not modeled")
+                    expression(target.value)
+                    expression(target.slice)
+                elif not all(isinstance(t, ast.Name) for t in node.targets):
                     raise Unsupported("Heap writes and unpacking are not modeled")
                 expression(node.value, input_allowed=True)
                 for call in ast.walk(node.value):
@@ -233,8 +256,8 @@ def analyze(source, function_line, filename, *, call_names=()):
     return fn, body, args, sites, used_calls
 
 
-def instrument(source, function_line, filename, globals_, *, future_flags=0, call_names=(), function_id=None):
-    fn, body, args, sites, calls = analyze(source, function_line, filename, call_names=call_names)
+def instrument(source, function_line, filename, globals_, *, future_flags=0, call_names=(), function_id=None, heap=False):
+    fn, body, args, sites, calls = analyze(source, function_line, filename, call_names=call_names, heap=heap)
     for name in calls:
         if name in globals_ and globals_[name] is not getattr(builtins, name):
             raise Unsupported("Global builtin binding is shadowed: " + name)
@@ -258,6 +281,50 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0, cal
             if isinstance(node.ctx, ast.Load):
                 return locate(invoke("read", frame(), const(node.id), copy.deepcopy(node)), node)
             return node
+
+        def scalar(self,node):
+            return locate(invoke("heap_scalar",frame(),node),node)
+
+        def visit_BinOp(self,node):
+            new=self.generic_visit(copy.deepcopy(node))
+            if heap:new.left,new.right=self.scalar(new.left),self.scalar(new.right)
+            return new
+
+        def visit_UnaryOp(self,node):
+            new=self.generic_visit(copy.deepcopy(node))
+            if heap:new.operand=self.scalar(new.operand)
+            return new
+
+        def visit_Compare(self,node):
+            new=self.generic_visit(copy.deepcopy(node))
+            if heap and not all(isinstance(op,(ast.Is,ast.IsNot)) for op in node.ops):
+                new.left=self.scalar(new.left)
+                new.comparators=[self.scalar(x) for x in new.comparators]
+            return new
+
+        def visit_BoolOp(self,node):
+            new=self.generic_visit(copy.deepcopy(node))
+            if heap:new.values=[self.scalar(x) for x in new.values]
+            return new
+
+        def visit_IfExp(self,node):
+            new=self.generic_visit(copy.deepcopy(node))
+            if heap:new.test=self.scalar(new.test)
+            return new
+
+        def visit_Subscript(self, node):
+            if heap:
+                site=f"{node.lineno}:{node.col_offset}:heap_read"
+                return locate(invoke("heap_read",frame(),const(site),self.visit(node.value),self.visit(node.slice)),node)
+            return self.generic_visit(node)
+
+        def visit_Dict(self,node):
+            new=self.generic_visit(copy.deepcopy(node))
+            return locate(invoke("heap_literal",frame(),const(f"{node.lineno}:{node.col_offset}:heap_origin"),new),node) if heap else new
+
+        def visit_List(self,node):
+            new=self.generic_visit(copy.deepcopy(node))
+            return locate(invoke("heap_literal",frame(),const(f"{node.lineno}:{node.col_offset}:heap_origin"),new),node) if heap else new
 
         def visit_Call(self, node):
             if node.func.id in call_names:
@@ -286,6 +353,7 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0, cal
                 )
             new = copy.deepcopy(node)
             arguments = [self.visit(a) for a in node.args]
+            if heap:arguments=[self.scalar(a) for a in arguments]
             new = locate(
                 invoke("call", frame(), const(node.func.id), copy.deepcopy(node.func), *arguments), node
             )
@@ -336,6 +404,10 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0, cal
                         node.test,
                     )
                     result.append(locate(transformed, node))
+            elif heap and isinstance(node,ast.Assign) and isinstance(node.targets[0],ast.Subscript):
+                target=node.targets[0]
+                # Helper args preserve RHS -> container -> key evaluation order.
+                result.extend([begin,action("heap_store",node,frame(),const(site),expr(node.value),expr(target.value),expr(target.slice))])
             elif isinstance(node, ast.Assign):
                 node.value = expr(node.value)
                 values = ast.Dict(

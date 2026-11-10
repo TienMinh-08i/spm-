@@ -59,6 +59,7 @@ class CallerRecorder(Recorder):
             "function": function,
             "invocation": invocation,
             "argument_stack": [],
+            "argument_heap_stack": [],
         }
         native_caller = sys._getframe(1).f_back
         caller = (
@@ -114,12 +115,15 @@ class CallerRecorder(Recorder):
     def argument_begin(self, frame):
         if frame is not None:
             self.frames[frame]["argument_stack"].append({})
+            self.frames[frame]["argument_heap_stack"].append(set())
 
     def argument_value(self, frame, site, value):
         if frame is None:
             return value, None
         reads = self.frames[frame]["argument_stack"].pop()
-        ident = self.emit(frame, site, "argument", reads=reads, values={"$argument": self.snapshot(value)})
+        heap_reads = self.frames[frame]["argument_heap_stack"].pop()
+        ident = self.emit(frame, site, "argument", reads=reads, values={"$argument": self.snapshot(value)},
+                          details={"heap_dependencies": sorted(heap_reads)} if heap_reads else None)
         return value, ident
 
     def call_target(self, frame, site, function, positional, keywords):

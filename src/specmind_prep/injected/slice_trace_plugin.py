@@ -18,6 +18,9 @@ RUNTIME = None
 ORIGINAL = None
 TARGET = None
 BASELINE = []
+BASELINE_ARGUMENTS = {}
+from specmind_prep.injected.slice_heap_runtime import HeapCallerRecorder, EvidenceSnapshot
+EVIDENCE = EvidenceSnapshot()
 BASELINE_FRAMES = {}
 BASELINE_BYTES = 0
 SITES = {}
@@ -36,7 +39,7 @@ HELPER_NAMESPACES = []
 def pytest_configure(config):
     global CONFIG, RUNTIME
     CONFIG = json.loads(Path(os.environ["SPECMIND_SLICE_CONFIG"]).read_text(encoding="utf-8"))
-    RUNTIME = CallerRecorder(CONFIG) if CONFIG.get("functions") else Recorder(CONFIG)
+    RUNTIME = HeapCallerRecorder(CONFIG) if CONFIG.get("heap") else CallerRecorder(CONFIG) if CONFIG.get("functions") else Recorder(CONFIG)
 
 
 def resolve_function(record):
@@ -138,6 +141,7 @@ def prepare_functions():
                 future_flags=flags,
                 call_names=record["call_names"],
                 function_id=name,
+                heap=bool(CONFIG.get("heap")),
             )
             replacements[name] = replacement
             SITES.update(namespace_sites(name, sites, record["repo_path"]))
@@ -174,7 +178,7 @@ def profile(frame, event, arg):
             sys.setprofile(None)
             return
         try:
-            values = {n: primitive(frame.f_locals[n]) for n in record["parameters"]}
+            values = {n: (EVIDENCE.snapshot(frame.f_locals[n]) if CONFIG.get("heap") else primitive(frame.f_locals[n])) for n in record["parameters"]}
         except ValueError as exc:
             ERRORS.append(str(exc))
             values = {"unmodeled": True}
@@ -188,12 +192,15 @@ def profile(frame, event, arg):
             call["function"] = function_id
         BASELINE.append(call)
         BASELINE_FRAMES[id(frame)] = call
+        if CONFIG.get("heap"):BASELINE_ARGUMENTS[id(frame)]={n:frame.f_locals[n] for n in record["parameters"]}
     elif event == "return":
         call = BASELINE_FRAMES.pop(id(frame), None)
         if call is not None:
             try:
                 call.update(returned=True)
-                call["return"] = primitive(arg)
+                call["return"] = EVIDENCE.snapshot(arg) if CONFIG.get("heap") else primitive(arg)
+                if CONFIG.get("heap"):
+                    call["arguments_after"]={k:EVIDENCE.snapshot(v) for k,v in BASELINE_ARGUMENTS.pop(id(frame)).items()}
                 BASELINE_BYTES += len(json.dumps(call["return"], ensure_ascii=True))
                 if BASELINE_BYTES > CONFIG["max_bytes"]:
                     LIMITED = True

@@ -154,7 +154,8 @@ class Recorder:
             return None
         snapshots = {name: self.snapshot(value) for name, value in (values or {}).items()}
         ident = self.emit(
-            frame, pending["site"], kind, pending["reads"], pending["inputs"], snapshots.keys(), snapshots
+            frame, pending["site"], kind, pending["reads"], pending["inputs"], snapshots.keys(), snapshots,
+            details={"heap_dependencies": sorted(pending["heap_dependencies"])} if pending.get("heap_dependencies") else None
         )
         state["pending"] = None
         return ident

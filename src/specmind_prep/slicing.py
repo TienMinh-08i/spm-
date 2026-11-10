@@ -35,17 +35,20 @@ SCHEMA = "dynamic-slice-trace-v1"
 MODEL = "primitive-local-guard-ddg-v2"
 READABLE_MODELS = {"primitive-local-structured-ddg-v1", MODEL}
 CALL_MODEL = "primitive-call-boundary-ddg-v3"
+HEAP_CALL_MODEL = "heap-call-boundary-ddg-v1"
 READABLE_MODELS.add(CALL_MODEL)
+READABLE_MODELS.add(HEAP_CALL_MODEL)
 READABLE_MODELS.add(READONLY_MODEL)
 PLUGIN = "specmind_prep.injected.slice_trace_plugin"
 
 
-def build_ddg(events, *, interprocedural=False):
+def build_ddg(events, *, interprocedural=False, heap=False):
     """Validate causal producer edges and attach dependencies to occurrence nodes."""
     nodes = []
     definitions = {}
     known = {}
     counts = Counter()
+    heap_definitions, deleted_locations, heap_objects = {}, set(), {}
     origins, results, used_arguments, invoked_frames = {}, set(), set(), {}
     for event in events:
         ident = event["id"]
@@ -59,7 +62,7 @@ def build_ddg(events, *, interprocedural=False):
             "return",
             "expression",
             "call",
-        } | ({"argument", "invocation", "call_result"} if interprocedural else set()):
+        } | ({"argument", "invocation", "call_result"} if interprocedural else set()) | ({"heap_origin", "heap_read", "heap_write", "heap_delete"} if heap else set()):
             raise ValueError("Unknown DDG event kind")
         frame = event["frame"]
         if type(frame) is not int or frame < 1:
@@ -84,6 +87,67 @@ def build_ddg(events, *, interprocedural=False):
             dependencies.update(event["links"].values())
         elif event.get("links"):
             raise ValueError("Call links require the interprocedural model")
+        heap_fields = {k for k in event if k.startswith("heap_")}
+        if heap_fields and not heap:
+            raise ValueError("Heap events require explicit heap model")
+        if heap:
+            hr, hw = event.get("heap_reads", {}), event.get("heap_writes", [])
+            if not isinstance(hr, dict) or not isinstance(hw, list) or any(not isinstance(loc, str) for loc in hw) or len(set(hw)) != len(hw):
+                raise ValueError("Invalid heap location record")
+            if any(not isinstance(loc, str) or not loc for loc in [*hr, *hw]):
+                raise ValueError("Heap locations must be nonempty strings")
+            kind = event["kind"]
+            if kind == "heap_read" and (len(hr) != 1 or hw):
+                raise ValueError("Heap read requires one live location")
+            if kind in {"heap_write", "heap_delete"} and (hr or len(hw) != 1):
+                raise ValueError("Heap store/delete requires one location")
+            if kind == "heap_origin" and hr:
+                raise ValueError("Heap origin cannot read existing locations")
+            if kind not in {"heap_origin", "heap_read", "heap_write", "heap_delete"} and (hr or hw):
+                raise ValueError("Normal event cannot silently perform heap access")
+            if bool(event.get("heap_deleted")) != (kind == "heap_delete"):
+                raise ValueError("Heap deletion marker differs from event kind")
+            if event["kind"] == "heap_origin":
+                obj = event.get("heap_object")
+                if not isinstance(obj, str) or obj in heap_objects or any(loc in heap_definitions for loc in hw):
+                    raise ValueError("Duplicate/invalid heap object origin")
+                if any(not loc.startswith(obj + "[") for loc in hw):
+                    raise ValueError("Heap location differs from object origin")
+                heap_objects[obj] = ident
+            for loc, producer in hr.items():
+                if type(producer) is not int or loc in deleted_locations or heap_definitions.get(loc) != producer:
+                    raise ValueError("Heap read is not linked to the latest live writer")
+                dependencies.add(producer)
+            for parent in event.get("heap_dependencies", []):
+                if type(parent) is not int or parent not in known or known[parent]["kind"] not in {"heap_read", "heap_origin"} or known[parent]["frame"] != frame:
+                    raise ValueError("Invalid same-frame heap read dependency")
+                dependencies.add(parent)
+            if "heap_argument_roots" in event:
+                roots=event["heap_argument_roots"]
+                if kind!="invocation" or not isinstance(roots,dict) or set(roots)!=set(event["arguments"]):
+                    raise ValueError("Heap input criteria differ from parameter bindings")
+                for values in roots.values():
+                    if not isinstance(values,list) or any(type(v) is not int or v not in known or known[v]["kind"] not in {"heap_origin","heap_write"} for v in values):
+                        raise ValueError("Invalid heap input criterion producer")
+            if "heap_mutations" in event:
+                mutations=event["heap_mutations"]
+                if kind!="call_result" or not isinstance(mutations,list):
+                    raise ValueError("Heap mutations require a return boundary")
+                for mutation in mutations:
+                    loc,root=mutation["location"],mutation["root"]
+                    if (type(root) is not int or root not in known or not event["links"]["invocation"]<root<ident
+                        or heap_definitions.get(loc)!=root or bool(mutation["deleted"])!=(loc in deleted_locations)):
+                        raise ValueError("Mutation criterion differs from final boundary writer")
+            for loc in hw:
+                if event["kind"] != "heap_origin" and not any(loc.startswith(obj + "[") for obj in heap_objects):
+                    raise ValueError("Heap write has no object origin")
+                if event["kind"] != "heap_origin":
+                    dependencies.update(origin for obj, origin in heap_objects.items() if loc.startswith(obj + "["))
+                heap_definitions[loc] = ident
+                if event.get("heap_deleted"):
+                    deleted_locations.add(loc)
+                else:
+                    deleted_locations.discard(loc)
         counts[(frame, event["site"])] += 1
         node = dict(event, occurrence=counts[(frame, event["site"])], depends_on=sorted(dependencies))
         known[ident] = node
@@ -202,10 +266,11 @@ def _snapshot_calls(payload):
     fields = ("arguments", "returned", "return", "phase") + (
         ("function",) if payload.get("functions") else ()
     )
-    return [{k: c[k] for k in fields} for c in source]
+    if source and "arguments_after" in source[0]:fields += ("arguments_after",)
+    return [{k: c.get(k) for k in fields} for c in source]
 
 
-def _call_specs(repo, records, caller):
+def _call_specs(repo, records, caller, *, heap=False):
     """Pure source preparation, also used to verify a sealed multi-function map."""
     specs, sites = {}, {}
     for name, record in records.items():
@@ -237,7 +302,7 @@ def _call_specs(repo, records, caller):
             if name == caller
             else []
         )
-        fn, _, parameters, mapping, _ = analyze(source, record["line"], str(path), call_names=call_names)
+        fn, _, parameters, mapping, _ = analyze(source, record["line"], str(path), call_names=call_names, heap=heap)
         specs[name] = {
             "source": source,
             "source_file": str(path),
@@ -307,11 +372,13 @@ def _execute(config, output, mode, timeout, repo, project):
 
 
 def trace_function(
-    repo, project, test, target, output, *, timeout=60, max_events=20000, caller=None, readonly_helpers=None
+    repo, project, test, target, output, *, timeout=60, max_events=20000, caller=None, readonly_helpers=None, heap=False
 ):
     repo = Path(repo).resolve()
     project = validate_project(project, repo)
     readonly = readonly_helpers is not None
+    if heap and (caller is None or readonly):
+        raise ValueError("Heap tracing requires a selected caller/target pair")
     if readonly and caller is not None:
         raise ValueError("Select caller mode or read-only helper mode, not both")
     output = separate_output(output, repo)
@@ -371,7 +438,7 @@ def trace_function(
     manifest = {
         "schema": SCHEMA,
         "complete": False,
-        "model": READONLY_MODEL if readonly else CALL_MODEL if caller else MODEL,
+        "model": HEAP_CALL_MODEL if heap else READONLY_MODEL if readonly else CALL_MODEL if caller else MODEL,
         "repo_commit": commit,
         "project": project,
         "repo": str(repo),
@@ -391,8 +458,8 @@ def trace_function(
             "kind": "intraprocedural",
             "inputs": "external primitive argument/input() origins",
             "control": "structured if/while with normalized top-level return guards",
-            "heap": False,
-            "forward": False,
+            "heap": bool(heap),
+            "forward": bool(caller),
             "reduced_ddg": False,
         },
     }
@@ -428,6 +495,9 @@ def trace_function(
                     "inspect generator predicates",
                 ],
             )
+    if heap:
+        manifest['scope'].update(heap_domain='exact dict/list; str keys; int indices; replacement stores',
+                                 scalar_operators_only=True, mutation_evidence='arguments before/after each selected call')
     write(output / "manifest.json", manifest)
     status, issues, events, calls, sites = "unsupported", [], [], [], {}
     try:
@@ -438,7 +508,7 @@ def trace_function(
             functions, sites, external, trusted = prepare_readonly(repo, selected, test_file)
             parameters = functions[target]["parameters"]
         elif caller:
-            functions, sites = _call_specs(repo, selected, caller)
+            functions, sites = _call_specs(repo, selected, caller, heap=heap)
             parameters = functions[target]["parameters"]
         else:
             _, _, parameters, sites, _ = analyze(source, record["line"], str(path))
@@ -464,7 +534,7 @@ def trace_function(
                 plugin=READONLY_PLUGIN,
             )
         elif caller:
-            config.update(functions=functions, caller=caller)
+            config.update(functions=functions, caller=caller, heap=bool(heap))
         baseline = _execute(config, output, "baseline", timeout, repo, project)
         if baseline.get("timeout") or baseline.get("missing_result"):
             status = "incomplete"
@@ -536,7 +606,7 @@ def trace_function(
         status = "incomplete"
         issues.append("Selected source/test changed during tracing")
     graph = (
-        (build_readonly_ddg(events) if readonly else build_ddg(events, interprocedural=bool(caller)))
+        (build_readonly_ddg(events) if readonly else build_ddg(events, interprocedural=bool(caller), heap=heap))
         if status == "complete_supported"
         else []
     )
@@ -635,7 +705,7 @@ def load_trace(directory, repo):
                     or config.get("test_file") != str(test_file)
                 ):
                     raise ValueError("Read-only configuration/source mismatch")
-        elif manifest["model"] == CALL_MODEL:
+        elif manifest["model"] in {CALL_MODEL, HEAP_CALL_MODEL}:
             records = manifest.get("functions", {})
             if set(records) != {manifest.get("caller"), manifest["function"]}:
                 raise ValueError("Invalid selected caller/target set")
@@ -644,7 +714,7 @@ def load_trace(directory, repo):
             target = records[manifest["function"]]
             if target["repo_path"] != location["file"] or target["line"] != location["line"]:
                 raise ValueError("Target location differs from the selected function set")
-            expected_functions, expected_sites = _call_specs(repo, records, manifest["caller"])
+            expected_functions, expected_sites = _call_specs(repo, records, manifest["caller"], heap=manifest["model"]==HEAP_CALL_MODEL)
             for mode in ("baseline", "instrumented"):
                 config = read(directory / (mode + ".config.json"))
                 if (
@@ -664,6 +734,9 @@ def load_trace(directory, repo):
     if manifest["trace_status"] == "complete_supported":
         original = read(directory / "baseline.json")
         observed = read(directory / "instrumented.json")
+        if manifest['model']==HEAP_CALL_MODEL:
+            if any('arguments_after' not in c for c in original.get('baseline_calls',[])+observed.get('calls',[])):
+                raise ValueError('Heap trace requires post-call argument evidence')
         if (
             original["mode"] != "baseline"
             or observed["mode"] != "instrumented"
@@ -684,14 +757,14 @@ def load_trace(directory, repo):
         rebuilt = (
             build_readonly_ddg(events)
             if manifest["model"] == READONLY_MODEL
-            else build_ddg(events, interprocedural=manifest["model"] == CALL_MODEL)
+            else build_ddg(events, interprocedural=manifest["model"] in {CALL_MODEL, HEAP_CALL_MODEL}, heap=manifest["model"]==HEAP_CALL_MODEL)
         )
         if nodes != rebuilt:
             raise ValueError("DDG differs from recorded execution")
         frames = {c["frame"] for c in observed["calls"]}
         if not frames or frames != {n["frame"] for n in nodes}:
             raise ValueError("DDG invocation/frame evidence mismatch")
-        if manifest["model"] in {CALL_MODEL, READONLY_MODEL}:
+        if manifest["model"] in {CALL_MODEL, HEAP_CALL_MODEL, READONLY_MODEL}:
             if (
                 len(frames) != len(observed["calls"])
                 or original.get("functions") != list(records)
@@ -721,6 +794,11 @@ def query_slice(trace, repo, event, variable, *, when="before"):
             issues=read(Path(trace) / "summary.json")["issues"],
         )
     sliced = backward_slice(nodes, event, variable, when)
+    if manifest['model']==HEAP_CALL_MODEL:
+        root=next(n for n in nodes if n['id']==sliced['root'])
+        value=root.get('values',{}).get(variable,{})
+        if isinstance(value,dict) and ('object' in value or isinstance(value.get('root'),dict) and 'ref' in value['root']):
+            raise ValueError('Object-valued criteria require automatic heap/location criteria, not a local reference slice')
     statements = {
         sites[n["site"]]["statement"]: sites[sites[n["site"]]["statement"]] for n in sliced["nodes"]
     }
@@ -733,8 +811,10 @@ def query_slice(trace, repo, event, variable, *, when="before"):
         limitations=[
             "Read-only type/identity scope with trusted operations; caller body and object contents are not sliced."
             if manifest["model"] == READONLY_MODEL
+            else "Selected caller/target dict/list heap model; unsupported operations are rejected."
+            if manifest["model"]==HEAP_CALL_MODEL
             else "Selected caller/target primitive-local model; caller inputs are external boundaries."
-            if manifest["model"] == CALL_MODEL
+            if manifest["model"] in {CALL_MODEL, HEAP_CALL_MODEL}
             else "Single function and primitive-local model; caller inputs are external boundaries.",
             "Not an independently executable program or whole-Python semantic slice.",
         ],
