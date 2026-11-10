@@ -110,6 +110,7 @@ def test_standard_scope_is_self_only_and_never_runs_pytest(tmp_path, monkeypatch
     out = tmp_path/'scope'
     result = module.prepare_scope(tmp_path/'dataset', tmp_path/'repo', out)
     rows, targets, manifest = module.load_scope(out, tmp_path/'repo')
-    assert result['callee_targets'] == 0 and manifest['policy'] == 'self-only-v1'
-    assert rows[0]['mutation_targets'][0]['target'] == 'p.f' and targets == [problem]
+    assert result['callee_targets'] == 0 and manifest['policy'] == 'self-only-tasks-v2'
+    assert rows[0]['mutation_targets'][0]['target'] == 'p.f'
+    assert targets[0]['problem_id'] == problem['problem_id'] and targets[0]['source'] == problem['source']
     assert module.prepare_scope(tmp_path/'dataset', tmp_path/'repo', out, resume=True) == result

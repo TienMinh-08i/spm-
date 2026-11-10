@@ -6,11 +6,13 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 import pytest
+from specmind_eval.common.call_binding import matches_call
 
 config = json.loads(Path(os.environ["MM_PREP_TRACE_CONFIG"]).read_text(encoding="utf8"))
-locations = {
-    (os.path.normcase(str(Path(p).resolve())), int(line)): key for p, line, key in config["locations"]
-}
+locations = defaultdict(list)
+tasks = config.get('tasks', [{'path':p,'line':line,'key':key} for p,line,key in config.get('locations',[])])
+for task in tasks:
+    locations[(os.path.normcase(str(Path(task['path']).resolve())), int(task['line']))].append(task)
 cache = {}
 links = defaultdict(set)
 reports = {}
@@ -28,9 +30,9 @@ def key(code):
 
 def profile(frame, event, arg):
     if current is not None and event == "call":
-        target = key(frame.f_code)
-        if target:
-            links[current].add(target)
+        for task in key(frame.f_code) or []:
+            if not task.get('binding') or matches_call(task['binding'], frame.f_locals, frame.f_back, config['repo']):
+                links[current].add(task['key'])
 
 
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
