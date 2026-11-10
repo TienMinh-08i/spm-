@@ -139,10 +139,15 @@ def repo_path_for_problem(problem: dict[str, Any], repo_root: Path) -> str:
     return str(explicit or "").replace("\\", "/")
 
 
+def evaluation_key(problem):
+    """API task identity, independent of a potentially shared analysis target."""
+    return str(problem.get('function_id') or problem.get('problem_id') or problem['task_id'])
+
+
 def load(problems_path, tests_path):
     spec = DatasetSpec("dataset", "", problems_path.parent, problems_path.name, str(tests_path.resolve()))
     problems, tests = load_dataset(spec)
-    ids = [str(p.get("problem_id") or p["task_id"]) for p in problems]
+    ids = [evaluation_key(p) for p in problems]
     if len(set(ids)) != len(ids):
         raise ValueError("Duplicate function IDs in dataset")
     return problems, tests

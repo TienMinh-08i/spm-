@@ -6,7 +6,9 @@ def evaluate(assertion, source, entrypoint, evaluator, mutants, config):
     if not assertion:
         return {'status': 'fail', 'reason': 'No valid assertion generated'}, None
     try:
-        validate(assertion, source, entrypoint, config.get('assertion_policy', 'legacy'))
+        target = getattr(evaluator, 'problem', {}).get('problem_id')
+        validate(assertion, source, entrypoint, config.get('assertion_policy', 'legacy'),
+                 state_attributes=config.get('state_attributes', {}).get(target, []))
     except (SyntaxError, ValueError) as exc:
         return {'status': 'fail', 'reason': str(exc), 'stage': 'validation'}, None
     correctness = evaluator.correctness(assertion)

@@ -14,6 +14,9 @@ def violation(module,dependency):
  if module.startswith('specmind_eval.') and dependency.startswith('specmind_prep'):
   return module not in BRIDGES
  if '.injected.' in module:
+  # The call ownership protocol is deliberately stdlib-only and shared by
+  # trace and evaluation; no other cross-namespace injected dependency is allowed.
+  if dependency == 'specmind_eval.common.call_binding':return False
   owner=module.rsplit('.',1)[0]+'.'
   return dependency.split('.')[0] not in sys.stdlib_module_names|{'pytest'} and not dependency.startswith(owner)
  if module.startswith('specmind_eval.') and dependency.startswith('specmind_eval.'):

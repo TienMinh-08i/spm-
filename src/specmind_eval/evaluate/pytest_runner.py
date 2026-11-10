@@ -91,6 +91,7 @@ def run_pytest_postcondition(
         return "error", {"error": "No linked tests found.", "logs": []}
 
     nodeids = [pytest_nodeid(item, mode=test_nodeid_mode) for item in tests]
+    problem = dict(problem, _repo_root=str(repo_root))
     with tempfile.TemporaryDirectory(prefix="paper_eval_dataset_") as tmp:
         tmp_dir = Path(tmp)
         plugin_path = tmp_dir / "paper_eval_dataset_plugin.py"

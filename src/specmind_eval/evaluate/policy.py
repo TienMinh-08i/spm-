@@ -11,7 +11,7 @@ MODULES = {
 READ_METHODS = set('get keys values items count index startswith endswith lower upper strip lstrip rstrip split isalpha isdigit isspace'.split())
 
 
-def validate(assertion, source, entrypoint, policy='legacy'):
+def validate(assertion, source, entrypoint, policy='legacy', *, state_attributes=()):
     tree = ast.parse(assertion)
     asserts = [n for n in ast.walk(tree) if isinstance(n, ast.Assert)]
     if not asserts:
@@ -23,6 +23,10 @@ def validate(assertion, source, entrypoint, policy='legacy'):
     if len(asserts) != 1 or not isinstance(tree.body[-1], ast.Assert):
         raise ValueError('Behavioral policy requires one final, unconditional assert')
     fn = ast.parse(source).body[0]
+    written_attributes = {n.attr for n in ast.walk(fn) if isinstance(n,ast.Attribute) and isinstance(n.ctx,ast.Store)}
+    protected = {'__code__','__globals__','__defaults__','__kwdefaults__','__closure__','__dict__',
+                 '__class__','__getattribute__','__subclasses__','__builtins__'}
+    allowed_state = set(state_attributes) & written_attributes - protected
     args = fn.args
     inputs = {a.arg for a in args.posonlyargs + args.args + args.kwonlyargs}
     inputs.update(a.arg for a in (args.vararg, args.kwarg) if a)
@@ -72,7 +76,7 @@ def validate(assertion, source, entrypoint, policy='legacy'):
             if node.id == entrypoint or node.id not in names:
                 raise ValueError('Name outside input/output contract: ' + node.id)
         if isinstance(node, ast.Attribute):
-            if node.attr.startswith('__'):
+            if node.attr.startswith('__') and node.attr not in allowed_state:
                 raise ValueError('Metadata/dunder access is not allowed')
             if isinstance(node.value, ast.Name) and node.value.id in modules:
                 if node.attr not in MODULES[modules[node.value.id]]:

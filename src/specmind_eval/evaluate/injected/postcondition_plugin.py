@@ -298,6 +298,14 @@ def pytest_sessionstart(session):
 
         @functools.wraps(target)
         def wrapped(*args, **kwargs):
+            binding = problem.get('_delegate_binding')
+            if binding:
+                from specmind_eval.common.call_binding import matches_call
+                bound = inspect.signature(original).bind(*args, **kwargs)
+                bound.apply_defaults()
+                if (CURRENT_NODEID is None or CURRENT_PHASE != 'call'
+                        or not matches_call(binding, bound.arguments, sys._getframe(1), problem['_repo_root'])):
+                    return original(*args, **kwargs)
             _event(kind="target_call")
             if mutant_source and not distinct and CURRENT_PHASE=='call':
                 _event(kind='mutation_call', mutation_target=problem.get('problem_id'))

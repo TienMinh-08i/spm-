@@ -1,6 +1,6 @@
 """Read-only prepared artifact loaders; validation behavior is unchanged."""
 from pathlib import Path
-from specmind_eval.inputs.dataset import load
+from specmind_eval.inputs.dataset import load, evaluation_key
 from specmind_eval.common.storage import read
 from specmind_eval.common.fingerprint import digest, file_hash, source_environment, require_source_environment
 
@@ -23,19 +23,21 @@ def load_prepared_dataset(directory, repo):
     problems, tests = load(directory/'problems.jsonl', directory/'tests.jsonl')
     results = {r['function']: r for r in read(directory/'results.json')}
     for problem in problems:
-        key = problem.get('problem_id') or problem['task_id']
+        key = evaluation_key(problem)
         record = results.get(key, {})
         if record.get('status') != 'ready' or digest(tests.get(key, [])) != digest(record.get('tests', [])):
             raise ValueError('Prepared test evidence mismatch: '+key)
     return problems, tests, manifest
 
 
-def load_prepared_mutants(output,repo,dataset_manifest):
+def load_prepared_mutants(output,repo,dataset_manifest, *, allow_unfiltered=False):
     """Read/verify only, no Docker, generation or discovery in main loop."""
     output=Path(output).resolve()
     manifest=read(output/'manifest.json')
     if not manifest or manifest.get('schema')!='prepared-mutants-v1' or not manifest.get('complete'):
         raise ValueError('Prepared mutants missing or incomplete')
+    if manifest.get('runtime_filter_required') and not allow_unfiltered:
+        raise ValueError('Runtime filtering required for this rebound corpus; use filter-mutants before evaluation')
     required = {'summary.json', 'functions.json', 'targets_input.json'}
     if not isinstance(manifest.get("files"), dict) or not required.issubset(manifest["files"]):
         raise ValueError("Manifest missing required artifact hashes")
@@ -46,5 +48,7 @@ def load_prepared_mutants(output,repo,dataset_manifest):
         if Path(name).name!=name or file_hash(output/name)!=value:
             raise ValueError('Prepared mutant artifact mismatch: '+name)
     rows=read(output/'functions.json')
+    if len({r['function'] for r in rows}) != len(rows):
+        raise ValueError('Prepared corpus has duplicate API tasks')
     return {r['function']:r for r in rows},manifest
 
