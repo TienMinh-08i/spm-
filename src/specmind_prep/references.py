@@ -12,6 +12,17 @@ from pathlib import Path
 FUNCTIONS = (ast.FunctionDef, ast.AsyncFunctionDef)
 
 
+def _source_segment(encoded_lines, node):
+    """AST columns are UTF-8 byte offsets; split source once per file."""
+    first, last = node.lineno - 1, node.end_lineno - 1
+    if first == last:
+        return encoded_lines[first][node.col_offset:node.end_col_offset].decode("utf-8")
+    return b"\n".join([encoded_lines[first][node.col_offset:],
+                        *encoded_lines[first + 1:last],
+                        encoded_lines[last][:node.end_col_offset]]).decode("utf-8")
+
+
+
 def public_calls(repo, project, api, model):
     """Batch call-site scan; uncertain instance dispatch never becomes a resolved edge."""
     from specmind_prep.public_api import canonical
@@ -35,6 +46,7 @@ def public_calls(repo, project, api, model):
         hashes[filename] = hashlib.sha256(raw).hexdigest()
         text = raw.decode('utf-8-sig').replace('\r\n', '\n').replace('\r', '\n')
         lines = text.splitlines()
+        encoded_lines = text.encode('utf-8').split(b'\n')
         tree = ast.parse(text, filename=filename)
         bindings, star = module_bindings(tree, module, path.name == '__init__.py')
 
@@ -272,6 +284,7 @@ def references(repo, index, function_id, *, context_lines=3):
         hashes[filename] = hashlib.sha256(raw).hexdigest()
         text = raw.decode('utf-8-sig').replace('\r\n', '\n').replace('\r', '\n')
         lines = text.splitlines()
+        encoded_lines = text.encode('utf-8').split(b'\n')
         tree = ast.parse(text, filename=filename)
         bindings, star_import = module_bindings(tree, module, path.name == '__init__.py')
         for caller, node in function_nodes(tree, module):
@@ -303,7 +316,7 @@ def references(repo, index, function_id, *, context_lines=3):
                     'caller': caller, 'caller_definition': f'{filename}:{node.lineno}',
                     'file': filename, 'line': call.lineno, 'column': call.col_offset + 1,
                     'location': f'{filename}:{call.lineno}',
-                    'expression': ast.get_source_segment(text, call),
+                    'expression': _source_segment(encoded_lines, call),
                     'context_start_line': start, 'context_end_line': end,
                     'context': '\n'.join(lines[start - 1:end]),
                 }
