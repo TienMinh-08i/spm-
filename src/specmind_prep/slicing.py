@@ -1,8 +1,8 @@
 """Occurrence-based backward dynamic slicing (Agrawal-Horgan Approach 3).
 
-Primitive locals, structured if/while and top-level return guards. Optionally
-link one selected caller/target via explicit actual/formal and return events.
-No heap, arbitrary callee effects, general CFG, forward query or Reduced DDG.
+Explicit selected Python frames, structured control and acyclic return guards.
+Optional heap tracing supports exact dict/list and ordinary instance storage.
+Unmodeled descriptors, external effects and general CFG exits are rejected.
 """
 from collections import Counter
 from pathlib import Path
@@ -162,7 +162,7 @@ def _call_dependencies(event, known, origins, results, used_arguments, invoked_f
     frame, kind, links = event["frame"], event["kind"], event["links"]
     if not isinstance(links, dict) or any(
         not isinstance(role, str)
-        or (role not in {"invocation", "argument", "return"} and not role.startswith("result:"))
+        or (role not in {"invocation", "frame_invocation", "argument", "return"} and not role.startswith("result:"))
         for role in links
     ):
         raise ValueError("Invalid call dependency roles")
@@ -174,7 +174,7 @@ def _call_dependencies(event, known, origins, results, used_arguments, invoked_f
         expected = (
             "call_result"
             if role.startswith("result:")
-            else {"invocation": "invocation", "argument": "argument", "return": "return"}[role]
+            else {"invocation": "invocation", "frame_invocation": "invocation", "argument": "argument", "return": "return"}[role]
         )
         if known[parent]["kind"] != expected:
             raise ValueError("Call dependency kind differs from its role")
@@ -203,6 +203,11 @@ def _call_dependencies(event, known, origins, results, used_arguments, invoked_f
     elif invocation is not None and kind != "call_result":
         raise ValueError("Only a return bridge can consume a same-frame invocation")
     origin = invocation if external else None
+    if "frame_invocation" in links:
+        parent = links["frame_invocation"]
+        if kind != "call_result" or known[parent]["frame"] == frame or known[parent]["callee"] != event["function"]:
+            raise ValueError("Invalid parent frame invocation on return bridge")
+        origin = parent
     if frame in origins and origins[frame] != origin:
         raise ValueError("Missing or changed frame invocation boundary")
     origins[frame] = origin
@@ -274,33 +279,32 @@ def _call_specs(repo, records, caller, *, heap=False):
     """Pure source preparation, also used to verify a sealed multi-function map."""
     specs, sites = {}, {}
     for name, record in records.items():
-        if record.get("parent_name") or record.get("async"):
+        if record.get("async"):
             raise Unsupported("Selected caller and target must be top-level synchronous functions")
         path = (repo / record["repo_path"]).resolve()
         if not path.is_relative_to(repo) or path.stat().st_size > 2_000_000:
             raise Unsupported("Invalid or oversized selected source")
         source = path.read_bytes().decode("utf-8-sig")
         nodes = [
-            n for n in ast.parse(source).body if isinstance(n, ast.FunctionDef) and n.lineno == record["line"]
+            n for n in ast.walk(ast.parse(source)) if isinstance(n, ast.FunctionDef) and n.lineno == record["line"]
         ]
         if (
             len(nodes) != 1
             or nodes[0].name != record["entry_point"]
-            or name != record["module"] + "." + record["entry_point"]
+            or name != ".".join(filter(None, [record["module"], record.get("parent_name"), record["entry_point"]]))
         ):
             raise Unsupported("Selected function identity differs from its source")
         call_names = (
             sorted(
                 {
-                    n.func.id
+                    ast.unparse(n.func)
                     for n in ast.walk(nodes[0])
                     if isinstance(n, ast.Call)
-                    and isinstance(n.func, ast.Name)
-                    and n.func.id not in PURE_CALLS | {"input", "print"}
+                    and isinstance(n.func, (ast.Name, ast.Attribute))
+                    and ast.unparse(n.func) not in PURE_CALLS | {"input", "print"}
                 }
             )
-            if name == caller
-            else []
+
         )
         fn, _, parameters, mapping, _ = analyze(source, record["line"], str(path), call_names=call_names, heap=heap)
         specs[name] = {
@@ -309,6 +313,7 @@ def _call_specs(repo, records, caller, *, heap=False):
             "repo_path": record["repo_path"],
             "source_sha256": file_hash(path),
             "module": record["module"],
+            "parent_name": record.get("parent_name"),
             "line": record["line"],
             "entry_point": record["entry_point"],
             "parameters": parameters,
@@ -372,7 +377,7 @@ def _execute(config, output, mode, timeout, repo, project):
 
 
 def trace_function(
-    repo, project, test, target, output, *, timeout=60, max_events=20000, caller=None, readonly_helpers=None, heap=False
+    repo, project, test, target, output, *, timeout=60, max_events=20000, caller=None, readonly_helpers=None, heap=False, helpers=()
 ):
     repo = Path(repo).resolve()
     project = validate_project(project, repo)
@@ -425,6 +430,10 @@ def trace_function(
         or len(set(readonly_helpers)) != len(readonly_helpers)
     ):
         raise ValueError("Select at most seven distinct known read-only helpers")
+    if not isinstance(helpers, (tuple, list)) or len(set(helpers)) != len(helpers) or any(
+        name not in index or name in {caller, target} for name in helpers
+    ) or (helpers and (caller is None or readonly)):
+        raise ValueError("Helpers require a caller and distinct known function identities")
     record = index[target]
     path = repo / record["repo_path"]
     raw = path.read_bytes()
@@ -469,15 +478,16 @@ def trace_function(
                 k: index[name].get(k)
                 for k in ("repo_path", "line", "module", "entry_point", "parent_name", "async")
             }
-            for name in ((target, *readonly_helpers) if readonly else (caller, target))
+            for name in ((target, *readonly_helpers) if readonly else (caller, target, *helpers))
         }
         manifest.update(caller=caller, functions=selected)
+        if helpers: manifest["helpers"] = list(helpers)
         manifest["source_files"].update(
             {r["repo_path"]: file_hash(repo / r["repo_path"]) for r in selected.values()}
         )
         manifest["scope"].update(
             kind="selected-caller-target",
-            functions=[caller, target],
+            functions=[caller, target, *helpers],
             inputs="external selected-caller arguments; explicit actual/formal and return links",
         )
         if readonly:
@@ -496,12 +506,12 @@ def trace_function(
                 ],
             )
     if heap:
-        manifest['scope'].update(heap_domain='exact dict/list; str keys; int indices; replacement stores',
+        manifest['scope'].update(heap_domain='exact dict/list and ordinary instance storage; str keys/attributes; int indices',
                                  scalar_operators_only=True, mutation_evidence='arguments before/after each selected call')
     write(output / "manifest.json", manifest)
     status, issues, events, calls, sites = "unsupported", [], [], [], {}
     try:
-        if record.get("parent_name") or record.get("async"):
+        if record.get("async"):
             raise Unsupported("Methods and async functions require a later model")
         functions = None
         if readonly:
@@ -707,7 +717,7 @@ def load_trace(directory, repo):
                     raise ValueError("Read-only configuration/source mismatch")
         elif manifest["model"] in {CALL_MODEL, HEAP_CALL_MODEL}:
             records = manifest.get("functions", {})
-            if set(records) != {manifest.get("caller"), manifest["function"]}:
+            if set(records) != {manifest.get("caller"), manifest["function"], *manifest.get("helpers", [])}:
                 raise ValueError("Invalid selected caller/target set")
             if any(r["repo_path"] not in manifest["source_files"] for r in records.values()):
                 raise ValueError("Selected function source is missing from trace hashes")

@@ -81,7 +81,7 @@ def prepare(dataset, repo, project, output, criteria=None):
 def render_automatic_context(automatic, sites, *, heap_supported=False):
     lines = ['Observed caller argument origins and returned-value uses.',
              'One execution is evidence, not a complete API contract.',
-             'Mutation criteria use exact dict/list locations only.' if heap_supported else 'Mutation/alias criteria are not supported by this model.']
+             'Mutation criteria cover supported dict/list and ordinary instance attribute locations; custom descriptors are unsupported.' if heap_supported else 'Mutation/alias criteria are not supported by this model.']
     for call in automatic['calls']:
         lines.append('Invocation: ' + str(call['invocation']) + '; frame: ' + str(call['frame']))
         groups = [('INPUT ORIGINS: ' + a['parameter'], a['nodes']) for a in call['inputs']]

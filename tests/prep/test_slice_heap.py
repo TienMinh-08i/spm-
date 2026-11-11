@@ -56,9 +56,12 @@ def test_custom_hooks_are_not_called():
         def __hash__(self):raise AssertionError('hash')
         def __eq__(self,other):raise AssertionError('eq')
     h=HeapMemory()
-    with pytest.raises(UnsupportedHeap):h.register({'x':Hostile()},1)
-    assert not h.objects
-    with pytest.raises(UnsupportedHeap):h.register(Hostile(),1)
+    value = Hostile()
+    h.register({'x':value},1)
+    assert any(ref is value for ref in h.references.values())
+    assert len(h.objects) == 1
+    h.register(value, 2)
+    assert h.objects[id(value)]["object"] is value
 
 
 def test_failed_store_is_atomic_and_unknown_origin_rejected():

@@ -2,9 +2,10 @@
 import json
 import sys
 from specmind_prep.injected.slice_runtime import TraceLimit
-from specmind_prep.injected.slice_calls import CallerRecorder
+from specmind_prep.injected.slice_calls import CallerRecorder, MethodBoundary
+import types
 from specmind_prep.injected.slice_runtime import primitive
-from specmind_prep.injected.slice_heap import UnsupportedHeap
+from specmind_prep.injected.slice_heap import UnsupportedHeap, is_heap_object, instance_dict
 from specmind_prep.injected.slice_heap_access import HeapAccessRecorder
 
 MODEL='heap-call-boundary-ddg-v1'
@@ -20,12 +21,12 @@ class EvidenceSnapshot:
         encoded=0
         def visit(v):
             nonlocal locations,encoded
-            if type(v) not in (dict,list):
+            if not is_heap_object(v):
                 result=primitive(v)
                 encoded+=len(json.dumps(result,ensure_ascii=True).encode('utf8'))
                 if encoded>8000000:raise UnsupportedHeap('Evidence byte budget exceeded')
                 return result
-            if len(v)>10000:raise UnsupportedHeap('Evidence location budget exceeded')
+            if len(v if type(v) in (dict,list) else instance_dict(v))>10000:raise UnsupportedHeap('Evidence location budget exceeded')
             if type(v) is dict and any(type(k) is not str for k in v):
                 raise UnsupportedHeap('Evidence requires string dictionary keys')
             if id(v) not in self.refs:
@@ -33,10 +34,10 @@ class EvidenceSnapshot:
                 self.refs[id(v)]=(f'e{len(self.refs)+1}',v)
             identity=self.refs[id(v)][0]
             if identity not in nodes:
-                locations+=len(v)
+                locations+=len(v if type(v) in (dict,list) else instance_dict(v))
                 if locations>10000:raise UnsupportedHeap('Evidence location budget exceeded')
                 nodes[identity]=None
-                entries=list(v.items()) if type(v) is dict else list(enumerate(v))
+                entries=list(v.items()) if type(v) is dict else list(enumerate(v)) if type(v) is list else list(instance_dict(v).items())
                 if type(v) is dict:
                     encoded+=sum(len(json.dumps(k,ensure_ascii=True).encode('utf8')) for k,_ in entries)
                     if encoded>8000000:raise UnsupportedHeap('Evidence byte budget exceeded')
@@ -64,10 +65,10 @@ class HeapCallerRecorder(CallerRecorder):
 
     def snapshot(self,value):
         if self.boundary:
-            if type(value) in (dict,list):
+            if is_heap_object(value):
                 with self.heap.bind(self.snapshot_frame):self.heap.input(value,'entry')
             return self.evidence.snapshot(value)
-        if type(value) in (dict,list):
+        if is_heap_object(value):
             if id(value) not in self.heap.memory.objects:
                 self.issue('Object has no observed allocation/input origin')
                 return {'type':'unmodeled'}
@@ -87,7 +88,7 @@ class HeapCallerRecorder(CallerRecorder):
         if frame is None:return value
         # No new origins may be invented for a return value produced outside the
         # instrumented allocation/input hooks.
-        if type(value) in (dict,list) and id(value) not in self.heap.memory.objects:
+        if is_heap_object(value) and id(value) not in self.heap.memory.objects:
             self.issue('Unobserved returned object')
         for record in self.heap.memory.objects.values():self.heap.memory._consistent(record['object'])
         previous=self.boundary,self.snapshot_frame
@@ -102,6 +103,15 @@ class HeapCallerRecorder(CallerRecorder):
         if frame is None:return obj[key]
         with self.heap.bind(frame):return self.heap.read(obj,key,site)
 
+    def heap_attr_read(self,frame,site,obj,name):
+        if frame is None:return getattr(obj,name)
+        with self.heap.bind(frame):return self.heap.read(obj,name,site,attribute=True)
+
+    def heap_attr_store(self,frame,site,value,obj,name):
+        if frame is None:setattr(obj,name,value);return
+        with self.heap.bind(frame):self.heap.write(value,obj,name,site,attribute=True)
+        self.expression(frame)
+
     def heap_literal(self,frame,site,value):
         if frame is None:return value
         with self.heap.bind(frame):return self.heap.origin(value,site)
@@ -115,11 +125,11 @@ class HeapCallerRecorder(CallerRecorder):
         pending=list(values);seen=set()
         while pending:
             obj=pending.pop()
-            if type(obj) not in (dict,list) or id(obj) in seen:continue
+            if not is_heap_object(obj) or id(obj) in seen:continue
             if id(obj) not in self.heap.memory.objects:
                 raise UnsupportedHeap('Argument object has no observed origin')
             seen.add(id(obj))
-            pending.extend(v for _,v in self.heap.memory._entries(obj) if type(v) in (dict,list))
+            pending.extend(v for _,v in self.heap.memory._entries(obj) if is_heap_object(v))
         return seen
 
     def _attach(self,event,fields):
@@ -132,8 +142,12 @@ class HeapCallerRecorder(CallerRecorder):
 
     def call_target(self,frame,site,function,positional,keywords):
         if frame is None:return super().call_target(frame,site,function,positional,keywords)
-        spec=self.config['functions'][self.config['function']]
-        values={n:pair[0] for n,pair in zip(spec['positional'],positional)}
+        actual = function.function if type(function) is MethodBoundary else function
+        implementation = actual.__func__ if type(actual) is types.MethodType else actual
+        selected=next((name for name,(fn,code) in self.targets.items() if fn is implementation),self.config['function'])
+        spec=self.config['functions'][selected]
+        bound = [function.receiver, *positional] if type(function) is MethodBoundary else positional
+        values={n:pair[0] for n,pair in zip(spec['positional'],bound)}
         values.update({n:pair[0] for n,pair in keywords.items()})
         reachable={n:self._reachable([v]) for n,v in values.items()}
         roots={n:sorted({self.heap.memory.objects[i]['origin'] for i in ids} |
@@ -163,7 +177,7 @@ class HeapCallerRecorder(CallerRecorder):
 
     def heap_scalar(self,frame,value):
         if frame is None:return value
-        if type(value) in (dict,list):
+        if is_heap_object(value):
             raise UnsupportedHeap('Container operators/truth/membership require explicit content/shape model')
         primitive(value)
         return value

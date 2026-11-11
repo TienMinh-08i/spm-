@@ -156,7 +156,6 @@ def test_failing_test_after_criterion_can_still_have_a_valid_trace(tmp_path):
         "def f(x):\n    while x:\n        if x:\n            return 0\n    return x\n",
         "def f(x):\n    x[0]=1\n    return x\n",
         "def f(x):\n    return other(x)\n",
-        "def f(x):\n    return GLOBAL+x\n",
         "def f(x):\n    for i in range(x):\n        pass\n    return x\n",
     ],
 )
@@ -517,3 +516,15 @@ def test_value_before_guard_exit_is_distinct_from_control_of_return(tmp_path):
     returned = query_slice(out, repo, return_event(out), "$return", when="after")
     assert lines(value) == {1, 2}
     assert lines(returned) == {1, 2, 3, 5}
+
+@pytest.mark.parametrize('called', [False, True])
+def test_global_input_support_does_not_claim_an_unexecuted_criterion(tmp_path, called):
+    source = 'GLOBAL = 7\ndef f(x):\n    return GLOBAL + x\n'
+    test = ('from demo import f\ndef test_f():\n    assert f(2) == 9\n'
+            if called else 'def test_f():\n    pass\n')
+    repo, project, out = fixture(tmp_path, source, test)
+    result = run(repo, project, out)
+    assert result['status'] == ('complete_supported' if called else 'criterion_not_reached')
+    if called:
+        nodes, _, _ = load_trace(out, repo)
+        assert any(n['kind'] == 'input' and '$global:GLOBAL' in n.get('values', {}) for n in nodes)

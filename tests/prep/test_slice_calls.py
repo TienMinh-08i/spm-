@@ -121,7 +121,7 @@ def caller(flag):
     "case,expected",
     [
         ("return target()", "unsupported"),
-        ("return target(target(1))", "unsupported"),
+        ("return target(target(1))", "complete_supported"),
         ("return 0", "criterion_not_reached"),
     ],
 )
@@ -226,7 +226,7 @@ def test_cli_selected_caller_and_target_input_query(tmp_path, capsys):
 
 
 @pytest.mark.parametrize(
-    "expression", ["flag and target(x)", "target(x) if flag else 0", "0 < int(flag) < target(x)"]
+    "expression", ["0 < int(flag) < target(x)"]
 )
 def test_conditionally_executed_call_inside_expression_is_explicitly_unsupported(tmp_path, expression):
     repo, project, out = fixture(
@@ -255,3 +255,35 @@ def test_argument_condition_and_unconditional_first_operand_remain_supported(
     result = sliced(out, repo, "demo.target")
     flags = [n for n in result["nodes"] if n["kind"] == "parameter" and "flag" in n["writes"]]
     assert bool(flags) is needs_flag
+
+
+@pytest.mark.parametrize("expression", ["flag and target(x)", "target(x) if flag else 0"])
+def test_return_conditionally_executed_call_has_real_predicate_dependency(tmp_path, expression):
+    repo, project, out = fixture(tmp_path,
+        "def target(x):\n    return x\ndef caller(flag,x):\n    return " + expression + "\n",
+        "from demo import caller\ndef test_f():\n    assert caller(True,3) == 3\n")
+    assert run(repo, project, out)["status"] == "complete_supported"
+    result = sliced(out, repo, "demo.target")
+    assert any(n["kind"] == "parameter" and "flag" in n["writes"] for n in result["nodes"])
+
+
+@pytest.mark.parametrize("expression,x,y,count", [("target(x) and target(y)", 0, 7, 1),
+    ("target(x) and target(y)", 2, 7, 2), ("target(x) or target(y)", 2, 7, 1),
+    ("target(x) or target(y)", 0, 7, 2)])
+def test_short_circuit_does_not_execute_skipped_operand(tmp_path, expression, x, y, count):
+    from specmind_prep.slice_queries import query_invocations
+    repo, project, out = fixture(tmp_path,
+        "def target(x):\n    return x\ndef caller(x,y):\n    return " + expression + "\n",
+        "from demo import caller\ndef test_f():\n    caller(" + str(x) + "," + str(y) + ")\n")
+    assert run(repo, project, out)["status"] == "complete_supported"
+    assert len(query_invocations(out, repo)["calls"]) == count
+
+
+@pytest.mark.parametrize("x,y,z,expected_calls", [(0, 4, 8, 2), (1, 4, 8, 2), (1, 0, 8, 3)])
+def test_nested_boolean_return_preserves_operand_order_and_control(tmp_path, x, y, z, expected_calls):
+    from specmind_prep.slice_queries import query_invocations
+    repo, project, out = fixture(tmp_path,
+        "def target(x):\n    return x\ndef caller(x,y,z):\n    return (target(x) and target(y)) or target(z)\n",
+        "from demo import caller\ndef test_f():\n    assert caller(" + str(x) + "," + str(y) + "," + str(z) + ") == " + str((x and y) or z) + "\n")
+    assert run(repo, project, out)["status"] == "complete_supported"
+    assert len(query_invocations(out, repo)["calls"]) == expected_calls

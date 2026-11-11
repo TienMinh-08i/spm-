@@ -52,7 +52,7 @@ def invocation_contexts(nodes, target):
         contexts.append({'invocation':call['id'], 'frame':call['frame'], 'site':call['site'],
                          'inputs':arguments, 'output':{'root':result['id'],'nodes':forward},
                          'mutations':mutations if 'heap_mutations' in result else None,
-                         'scope':'selected caller/target exact dict/list heap DDG' if 'heap_mutations' in result else 'selected caller/target primitive DDG; mutation criteria not supported'})
+                         'scope':'selected frames with supported dict/list and ordinary instance attribute DDG' if 'heap_mutations' in result else 'selected caller/target primitive DDG; mutation criteria not supported'})
     if not contexts:
         raise ValueError('No observed target invocation')
     return contexts

@@ -46,7 +46,15 @@ def resolve_function(record):
     module = importlib.import_module(record["module"])
     if type(module) is not types.ModuleType:
         raise Unsupported("Customized module binding is not modeled")
-    target = module.__dict__.get(record["entry_point"])
+    owner = module
+    for part in (record.get("parent_name") or "").split("."):
+        if not part: continue
+        namespace = owner.__dict__ if type(owner) is types.ModuleType else type.__getattribute__(owner, "__dict__")
+        owner = namespace.get(part)
+        if not isinstance(owner, type):
+            raise Unsupported("Selected lexical class binding not found")
+    namespace = owner.__dict__ if type(owner) is types.ModuleType else type.__getattribute__(owner,"__dict__")
+    target = namespace.get(record["entry_point"])
     if type(target) is not types.FunctionType or target.__globals__ is not module.__dict__:
         raise Unsupported("A plain module-owned function binding is required")
     code = target.__code__
@@ -59,10 +67,15 @@ def resolve_function(record):
     if hashlib.sha256(Path(record["source_file"]).read_bytes()).hexdigest() != record["source_sha256"]:
         raise Unsupported("Source changed before execution")
     compiled = compile(record["source"], record["source_file"], "exec", dont_inherit=True)
+    def codes(code):
+        for item in code.co_consts:
+            if isinstance(item, types.CodeType):
+                yield item
+                yield from codes(item)
     expected = next(
         (
             c
-            for c in compiled.co_consts
+            for c in codes(compiled)
             if isinstance(c, types.CodeType)
             and c.co_name == record["entry_point"]
             and c.co_firstlineno == record["line"]
@@ -127,7 +140,7 @@ def prepare_functions():
         record = CONFIG["functions"][name]
         ORIGINALS[function.__code__] = (name, record)
         for alias in record["call_names"]:
-            if function.__globals__.get(alias) is not target:
+            if "." not in alias and not any(function.__globals__.get(alias) is selected_function for selected_function in selected.values()):
                 raise Unsupported("Selected call name does not resolve to the target: " + alias)
         if CONFIG["mode"] == "instrumented":
             flags = 0
@@ -155,6 +168,7 @@ def prepare_functions():
             HELPER_NAMESPACES.append(namespace)
         PATCHES.append((function, function.__code__))
         function.__code__ = replacements[name]
+    RUNTIME.targets = {name: (function, replacements[name]) for name, function in selected.items()}
     RUNTIME.target = target
     RUNTIME.target_code = replacements[CONFIG["function"]]
 

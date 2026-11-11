@@ -5,7 +5,7 @@ Local-variable and predicate edges still belong to the main DDG instrumenter.
 """
 import ast
 from contextlib import contextmanager
-from specmind_prep.injected.slice_heap import HeapMemory, UnsupportedHeap
+from specmind_prep.injected.slice_heap import HeapMemory, UnsupportedHeap, is_heap_object, instance_dict
 
 HELPER = '__specmind_heap_access__'
 
@@ -67,7 +67,7 @@ class HeapAccessRecorder:
         return len(self.events)+1
 
     def origin(self, value, site, kind='allocation'):
-        if type(value) not in (dict,list):return value
+        if not is_heap_object(value):return value
         existing=id(value) in self.memory.objects
         event=self._next() if not existing else self.memory.last_event
         identity=self.memory.register(value,event)
@@ -80,19 +80,23 @@ class HeapAccessRecorder:
         pending=[value];seen=set()
         while pending:
             obj=pending.pop()
-            if type(obj) not in (dict,list) or id(obj) in seen:continue
+            if not is_heap_object(obj) or id(obj) in seen:continue
             seen.add(id(obj))
             self.origin(obj,site,'input')
-            pending.extend(v for _,v in self.memory._entries(obj) if type(v) in (dict,list))
+            pending.extend(v for _,v in self.memory._entries(obj) if is_heap_object(v))
 
-    def read(self, obj, key, site):
+    def read(self, obj, key, site, *, attribute=False):
+        if attribute == (type(obj) in (dict, list)):
+            raise UnsupportedHeap("Attribute/item access domain mismatch")
         event=self._next()
         value,observed=self.memory.read(obj,key)
         self._append({'id':event,'kind':'heap_read','site':site,
                             'location':observed['location'],'depends_on':[observed['producer']]})
         return value
 
-    def write(self, value, obj, key, site):
+    def write(self, value, obj, key, site, *, attribute=False):
+        if attribute == (type(obj) in (dict, list)):
+            raise UnsupportedHeap("Attribute/item access domain mismatch")
         # Python assignment evaluates RHS before the target container and key.
         event=self._next()
         observed=self.memory.write(obj,key,value,event)

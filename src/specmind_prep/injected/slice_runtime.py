@@ -133,6 +133,17 @@ class Recorder:
                 state["pending"]["reads"][name] = producer
         return value
 
+    def read_global(self, frame, site, name, value):
+        if frame is None or self.limited:
+            return value
+        snapshot = primitive(value)  # No opaque global effects are invented.
+        key = "$global:" + name
+        producer = self.emit(frame, site, "input", writes=[key], values={key: snapshot})
+        state = self.frames[frame]
+        reads = state["argument_stack"][-1] if state.get("argument_stack") else state["pending"]["reads"]
+        reads[key] = producer
+        return value
+
     def call(self, frame, name, function, *arguments):
         if frame is not None and name in self.operations and function is not self.operations[name]:
             self.issue("Builtin operation was rebound at execution: " + name)

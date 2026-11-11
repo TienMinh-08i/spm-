@@ -1,11 +1,12 @@
 """AST instrumentation for an explicit structured, primitive-local subset.
 
-Top-level guard returns are normalized to explicit else continuations. Other
-early exits/break/continue/exception edges still require a later CFG model.
+Acyclic return branches are normalized to explicit continuations. Returns
+across loop/exception scopes still require a CFG model.
 """
 import ast
 import builtins
 import copy
+from specmind_prep.injected.slice_control_flow import lower_return_expressions
 
 HELPER = "__specmind_slice_runtime__"
 FRAME = "__specmind_slice_frame__"
@@ -16,9 +17,59 @@ class Unsupported(ValueError):
     pass
 
 
+def normalize_returns(body, function):
+    """Put continuations into fall-through branches without evaluating twice.
+
+    This preserves the false-edge control dependency after an early return.
+    Returns crossing loops/exception scopes need a CFG and remain rejected.
+    The synthetic implicit return has explicit provenance, not invented source.
+    """
+    for node in ast.walk(function):
+        if isinstance(node, (ast.For, ast.While, ast.Try, ast.With)) and any(
+            isinstance(child, ast.Return) for child in ast.walk(node)
+        ):
+            raise Unsupported("Return across loop/exception/context scope requires CFG support")
+    implicit = ast.copy_location(ast.Return(value=None), function)
+    implicit._slice_implicit_return = True
+
+    def has_return(node):
+        return any(isinstance(child, ast.Return) for child in ast.walk(node))
+
+    def sequence(items, tail):
+        result = list(tail)
+        for node in reversed(items):
+            if isinstance(node, ast.Return):
+                result = [node]
+            elif isinstance(node, ast.If) and has_return(node):
+                branch = copy.deepcopy(node)
+                branch.body = sequence(node.body, result)
+                branch.orelse = sequence(node.orelse, result)
+                result = [branch]
+            else:
+                result = [node, *result]
+            if sum(1 for item in result for _ in ast.walk(item)) > 20000:
+                raise Unsupported("Return normalization exceeds AST budget")
+        return result
+
+    class LocalAnnotations(ast.NodeTransformer):
+        def visit_FunctionDef(self, node):
+            return node
+
+        def visit_ClassDef(self, node):
+            return node
+
+        def visit_AnnAssign(self, node):
+            if node.value is None:
+                return node  # Keep compiler local-binding semantics.
+            return ast.copy_location(ast.Assign(targets=[node.target], value=node.value), node)
+
+    normalized = [LocalAnnotations().visit(copy.deepcopy(node)) for node in body]
+    return sequence(lower_return_expressions(normalized), [implicit])
+
+
 def analyze(source, function_line, filename, *, call_names=(), heap=False):
     tree = ast.parse(source, filename=filename)
-    matches = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.lineno == function_line]
+    matches = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.lineno == function_line]
     if len(matches) != 1:
         raise Unsupported("Only a top-level synchronous function is supported initially")
     fn = matches[0]
@@ -48,30 +99,8 @@ def analyze(source, function_line, filename, *, call_names=(), heap=False):
         and isinstance(body[0].value.value, str)
     ):
         body = body[1:]
-    if not body or not isinstance(body[-1], ast.Return):
-        raise Unsupported("A single final top-level return is required")
-    # A terminating top-level guard makes its continuation depend on the FALSE
-    # predicate occurrence. Normalize only this proven structured case; merely
-    # accepting arbitrary Return nodes would omit that dependency.
-    continuation = [body[-1]]
-    for statement in reversed(body[:-1]):
-        if any(isinstance(n, ast.Return) for n in ast.walk(statement)):
-            if not (
-                isinstance(statement, ast.If)
-                and not statement.orelse
-                and len(statement.body) == 1
-                and isinstance(statement.body[0], ast.Return)
-            ):
-                raise Unsupported(
-                    "Only top-level single-return guards are modeled; other early exits require CFG support"
-                )
-            guarded = copy.deepcopy(statement)
-            guarded.orelse = continuation
-            continuation = [guarded]
-        else:
-            continuation.insert(0, statement)
-    body = continuation
-    for node in ast.walk(fn):
+    body = normalize_returns(body, fn)
+    for node in (n for statement in body for n in ast.walk(statement)):
         if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
             locals_.add(node.id)
     if locals_ & (PURE_CALLS | {"input", "print"}):
@@ -81,7 +110,7 @@ def analyze(source, function_line, filename, *, call_names=(), heap=False):
 
     def has_traced_call(nodes):
         return bool(call_names) and any(
-            isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id in call_names
+            isinstance(child, ast.Call) and isinstance(child.func, (ast.Name, ast.Attribute)) and ast.unparse(child.func) in call_names
             for node in nodes
             for child in ast.walk(node)
         )
@@ -99,8 +128,17 @@ def analyze(source, function_line, filename, *, call_names=(), heap=False):
             if type(node.value) not in (type(None), bool, int, float, str):
                 raise Unsupported("Non-primitive literal")
         elif isinstance(node, ast.Name):
-            if node.id not in locals_ or not isinstance(node.ctx, ast.Load):
-                raise Unsupported("Global/free variable read is outside the local model: " + node.id)
+            if not isinstance(node.ctx, ast.Load):
+                raise Unsupported("Expression requires a variable read")
+            if node.id not in locals_:
+                site = f"{node.lineno}:{node.col_offset}:global"
+                sites[site] = {"file":filename,"line":node.lineno,"column":node.col_offset+1,
+                              "source":ast.get_source_segment(source,node),"kind":"input","statement":owner_site}
+        elif heap and isinstance(node, ast.Attribute):
+            expression(node.value)
+            site = f"{node.lineno}:{node.col_offset}:heap_read"
+            sites[site] = {"file":filename,"line":node.lineno,"column":node.col_offset+1,
+                          "source":ast.get_source_segment(source,node),"kind":"heap_read","statement":owner_site}
         elif heap and isinstance(node, ast.Subscript):
             if not isinstance(node.ctx, ast.Load) or isinstance(node.slice, ast.Slice):
                 raise Unsupported("Only heap item reads are modeled")
@@ -141,9 +179,9 @@ def analyze(source, function_line, filename, *, call_names=(), heap=False):
             expression(node.body)
             expression(node.orelse)
         elif isinstance(node, ast.Call):
-            if not isinstance(node.func, ast.Name) or any(isinstance(a, ast.Starred) for a in node.args):
+            if not isinstance(node.func, (ast.Name, ast.Attribute)) or any(isinstance(a, ast.Starred) for a in node.args):
                 raise Unsupported("Method/dynamic/starred call is not modeled")
-            name = node.func.id
+            name = ast.unparse(node.func)
             if name in call_names:
                 if any(k.arg is None for k in node.keywords):
                     raise Unsupported("Unpacked call arguments are not modeled")
@@ -156,15 +194,10 @@ def analyze(source, function_line, filename, *, call_names=(), heap=False):
                     "kind": "invocation",
                     "statement": owner_site,
                 }
-                values = [(str(i), a) for i, a in enumerate(node.args)] + [
+                values = ([("self", node.func.value)] if isinstance(node.func, ast.Attribute) else []) + [(str(i), a) for i, a in enumerate(node.args)] + [
                     ("kw:" + k.arg, k.value) for k in node.keywords
                 ]
                 for key, argument in values:
-                    if any(
-                        isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in call_names
-                        for n in ast.walk(argument)
-                    ):
-                        raise Unsupported("Nested traced calls inside actual arguments require a later model")
                     sites[site + ":arg:" + key] = {
                         "file": filename,
                         "line": argument.lineno,
@@ -175,6 +208,8 @@ def analyze(source, function_line, filename, *, call_names=(), heap=False):
                     }
                     expression(argument)
                 return
+            elif isinstance(node.func, ast.Attribute):
+                raise Unsupported("Unselected method call")
             elif name == "input":
                 if not input_allowed or node.args or node.keywords:
                     raise Unsupported("input() is allowed only as an explicit assignment input origin")
@@ -192,10 +227,10 @@ def analyze(source, function_line, filename, *, call_names=(), heap=False):
     def statements(items):
         nonlocal owner_site
         for node in items:
-            site = f"{node.lineno}:{node.col_offset}:{type(node).__name__}"
+            site = getattr(node, "_slice_site", f"{node.lineno}:{node.col_offset}:{type(node).__name__}")
             owner_site = site
-            fragment = ast.get_source_segment(source, node)
-            if isinstance(node, (ast.If, ast.While)):
+            fragment = "<implicit return None>" if getattr(node, "_slice_implicit_return", False) else ast.get_source_segment(source, getattr(node, "_slice_origin", node))
+            if isinstance(node, (ast.If, ast.While)) and not hasattr(node, "_slice_origin"):
                 fragment = ("if " if isinstance(node, ast.If) else "while ") + ast.unparse(node.test) + ":"
             sites[site] = {
                 "file": filename,
@@ -206,11 +241,11 @@ def analyze(source, function_line, filename, *, call_names=(), heap=False):
                 "statement": site,
             }
             if isinstance(node, ast.Assign):
-                if heap and len(node.targets)==1 and isinstance(node.targets[0],ast.Subscript):
+                if heap and len(node.targets)==1 and isinstance(node.targets[0],(ast.Subscript, ast.Attribute)):
                     target=node.targets[0]
-                    if isinstance(target.slice,ast.Slice):raise Unsupported("Heap slices not modeled")
+                    if isinstance(target, ast.Subscript) and isinstance(target.slice,ast.Slice):raise Unsupported("Heap slices not modeled")
                     expression(target.value)
-                    expression(target.slice)
+                    if isinstance(target, ast.Subscript): expression(target.slice)
                 elif not all(isinstance(t, ast.Name) for t in node.targets):
                     raise Unsupported("Heap writes and unpacking are not modeled")
                 expression(node.value, input_allowed=True)
@@ -249,6 +284,8 @@ def analyze(source, function_line, filename, *, call_names=(), heap=False):
                 ):
                     raise Unsupported("Only standalone print expression statements are modeled")
                 expression(node.value, print_allowed=True)
+            elif isinstance(node, ast.AnnAssign) and node.value is None and isinstance(node.target, ast.Name):
+                pass  # Local annotations are not evaluated at runtime.
             elif not isinstance(node, ast.Pass):
                 raise Unsupported("Unmodeled statement: " + type(node).__name__)
 
@@ -276,9 +313,13 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0, cal
     def locate(node, original):
         return ast.copy_location(node, original)
 
+    local_names = set(args) | {n.id for statement in body for n in ast.walk(statement) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
+
     class Reads(ast.NodeTransformer):
         def visit_Name(self, node):
             if isinstance(node.ctx, ast.Load):
+                if node.id not in local_names:
+                    return locate(invoke("read_global", frame(), const(f"{node.lineno}:{node.col_offset}:global"), const(node.id), copy.deepcopy(node)), node)
                 return locate(invoke("read", frame(), const(node.id), copy.deepcopy(node)), node)
             return node
 
@@ -312,6 +353,10 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0, cal
             if heap:new.test=self.scalar(new.test)
             return new
 
+        def visit_Attribute(self, node):
+            site=f"{node.lineno}:{node.col_offset}:heap_read"
+            return locate(invoke("heap_attr_read",frame(),const(site),self.visit(node.value),const(node.attr)),node)
+
         def visit_Subscript(self, node):
             if heap:
                 site=f"{node.lineno}:{node.col_offset}:heap_read"
@@ -327,7 +372,7 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0, cal
             return locate(invoke("heap_literal",frame(),const(f"{node.lineno}:{node.col_offset}:heap_origin"),new),node) if heap else new
 
         def visit_Call(self, node):
-            if node.func.id in call_names:
+            if ast.unparse(node.func) in call_names:
                 site = f"{node.lineno}:{node.col_offset}:invoke"
 
                 def argument(value, key):
@@ -347,7 +392,9 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0, cal
                 )
                 return locate(
                     invoke(
-                        "call_target", frame(), const(site), copy.deepcopy(node.func), positional, keywords
+                        "call_target", frame(), const(site),
+                        (invoke("method_target",frame(),argument(node.func.value,"self"),const(node.func.attr))
+                         if isinstance(node.func,ast.Attribute) else copy.deepcopy(node.func)), positional, keywords
                     ),
                     node,
                 )
@@ -373,7 +420,7 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0, cal
         result = []
         for original in items:
             node = copy.deepcopy(original)
-            site = f"{node.lineno}:{node.col_offset}:{type(node).__name__}"
+            site = getattr(node, "_slice_site", f"{node.lineno}:{node.col_offset}:{type(node).__name__}")
             begin = action("begin", node, frame(), const(site))
             if isinstance(node, (ast.If, ast.While)):
                 test = locate(invoke("predicate", frame(), expr(node.test)), node.test)
@@ -404,10 +451,10 @@ def instrument(source, function_line, filename, globals_, *, future_flags=0, cal
                         node.test,
                     )
                     result.append(locate(transformed, node))
-            elif heap and isinstance(node,ast.Assign) and isinstance(node.targets[0],ast.Subscript):
+            elif heap and isinstance(node,ast.Assign) and isinstance(node.targets[0],(ast.Subscript, ast.Attribute)):
                 target=node.targets[0]
                 # Helper args preserve RHS -> container -> key evaluation order.
-                result.extend([begin,action("heap_store",node,frame(),const(site),expr(node.value),expr(target.value),expr(target.slice))])
+                result.extend([begin,action("heap_attr_store" if isinstance(target, ast.Attribute) else "heap_store",node,frame(),const(site),expr(node.value),expr(target.value),(expr(target.slice) if isinstance(target, ast.Subscript) else const(target.attr)))])
             elif isinstance(node, ast.Assign):
                 node.value = expr(node.value)
                 values = ast.Dict(
