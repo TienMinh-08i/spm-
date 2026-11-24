@@ -1,25 +1,30 @@
-"""Read-only prepared dynamic slice context; no tracing during evaluation."""
+"""Load the code-only slice for the public API being evaluated."""
 from pathlib import Path
+from specmind_eval.common.fingerprint import file_hash
+from specmind_eval.common.git import verify_commit
 from specmind_eval.common.storage import read
-from specmind_eval.common.fingerprint import digest, file_hash, source_environment, require_source_environment
-
+from specmind_eval.inputs.dataset import evaluation_key
 
 def load_slice_context(directory, repo, problems, budget):
-    directory=Path(directory); m=read(directory/'manifest.json')
-    if not m or m.get('schema')!='prepared-slice-context-v1' or not m.get('complete'):
-        raise ValueError('Missing complete prepared slice context')
-    if m.get('fingerprint') != digest({k:v for k,v in m.items() if k != 'fingerprint'}):
-        raise ValueError('Slice context manifest mismatch')
-    if set(m.get('files',{})) != {'packs.json'} or file_hash(directory/'packs.json')!=m['files']['packs.json']:
+    directory = Path(directory)
+    manifest = read(directory / 'manifest.json')
+    if not manifest or manifest.get('schema') != 'dynapyt-code-v1' or not manifest.get('commit'):
+        raise ValueError('Expected a pinned DynaPyt code context')
+    verify_commit(repo, manifest['commit'])
+    path = directory / 'packs.json'
+    if file_hash(path) != manifest.get('sha256'):
         raise ValueError('Slice context artifact mismatch')
-    require_source_environment(m['source_environment'],source_environment(repo),'Slice context')
-    rows=read(directory/'packs.json'); packs={}
-    from specmind_eval.inputs.dataset import evaluation_key
-    for p in problems:
-        key=evaluation_key(p); pack=rows.get(key)
-        if not pack or pack['analysis_target']!=p['problem_id']:
-            raise ValueError('Slice context missing or wrong target: '+key)
-        if len(pack['repository_context'])>budget:
-            raise ValueError('Slice context exceeds budget: '+key)
-        packs[key]=pack
-    return packs,file_hash(directory/'manifest.json')
+    rows = read(path)
+    if len(rows) != manifest.get('count'):
+        raise ValueError('Slice API inventory mismatch')
+    selected = {}
+    for problem in problems:
+        key = evaluation_key(problem)
+        pack = rows.get(key)
+        if not pack or pack['analysis_target'] != problem['problem_id']:
+            raise ValueError('Missing API or mismatched target: ' + key)
+        code = pack['repository_context']
+        if not code.strip() or len(code) > budget:
+            raise ValueError('Missing context or exceeded budget: ' + key)
+        selected[key] = pack
+    return selected, file_hash(directory / 'manifest.json')

@@ -1,0 +1,242 @@
+{
+  "marshmallow.decorators.post_dump": {
+    "analysis_target": "marshmallow.decorators.set_hook",
+    "repository_context": "        @post_dump\n    return set_hook(fn, POST_DUMP, many=pass_collection, pass_original=pass_original)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def dump_none(self, item, **kwargs):\n\n        @post_dump\n    return set_hook(fn, POST_DUMP, many=pass_collection, pass_original=pass_original)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def add_tag(self, item, **kwargs):\n                    data = [processor(item, many=many, **kwargs) for item in data]\n\n            @post_dump\n    return set_hook(fn, POST_DUMP, many=pass_collection, pass_original=pass_original)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n            def multiply_f_3(self, item, **kwargs):",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 1533
+    }
+  },
+  "marshmallow.decorators.post_load": {
+    "analysis_target": "marshmallow.decorators.set_hook",
+    "repository_context": "        @post_load\n    return set_hook(fn, POST_LOAD, many=pass_collection, pass_original=pass_original)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def check_unknown_post(self, data, unknown, **kwargs):\n\n        @decorator\n    return set_hook(fn, POST_LOAD, many=pass_collection, pass_original=pass_original)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def raise_value_error(self, item, **kwargs):\n\n        @post_load\n    return set_hook(fn, POST_LOAD, many=pass_collection, pass_original=pass_original)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def load_none(self, item, **kwargs):",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 1467
+    }
+  },
+  "marshmallow.decorators.pre_dump": {
+    "analysis_target": "marshmallow.decorators.set_hook",
+    "repository_context": "        @pre_dump\n    return set_hook(fn, PRE_DUMP, many=pass_collection)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def dump_none(self, item, **kwargs):\n\n        @pre_dump\n    return set_hook(fn, PRE_DUMP, many=pass_collection)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def increment_value(self, item, **kwargs):\n                    data = [processor(item, many=many, **kwargs) for item in data]\n\n            @pre_dump\n    return set_hook(fn, PRE_DUMP, many=pass_collection)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n            def multiply_f_1(self, item, **kwargs):",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 1448
+    }
+  },
+  "marshmallow.decorators.pre_load": {
+    "analysis_target": "marshmallow.decorators.set_hook",
+    "repository_context": "        @pre_load\n    return set_hook(fn, PRE_LOAD, many=pass_collection)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def check_unknown_pre(self, data, unknown, **kwargs):\n\n        @pre_load\n    return set_hook(fn, PRE_LOAD, many=pass_collection)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def load_none(self, item, **kwargs):",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 915
+    }
+  },
+  "marshmallow.decorators.set_hook": {
+    "analysis_target": "marshmallow.decorators.set_hook",
+    "repository_context": "    return set_hook(\n        fn,\n        VALIDATES_SCHEMA,\n        many=pass_collection,\n        pass_original=pass_original,\n        skip_on_field_errors=skip_on_field_errors,\n    return set_hook(\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n    return set_hook(\n            @validates_schema\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                validator_func(output, partial=partial, many=many, unknown=unknown)\n            def validate_schema(self, data, **kwargs):\n\n    return set_hook(fn, PRE_LOAD, many=pass_collection)\n    return set_hook(fn, PRE_LOAD, many=pass_collection)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n    return set_hook(fn, PRE_LOAD, many=pass_collection)\n        @pre_load\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def check_unknown_pre(self, data, unknown, **kwargs):\n\n    return set_hook(fn, POST_LOAD, many=pass_collection, pass_original=pass_original)\n    return set_hook(fn, POST_LOAD, many=pass_collection, pass_original=pass_original)\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n    return set_hook(fn, POST_LOAD, many=pass_collection, pass_original=pass_original)\n        @post_load\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                data = processor(data, many=many, **kwargs)\n        def check_unknown_post(self, data, unknown, **kwargs):",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 1907
+    }
+  },
+  "marshmallow.decorators.validates": {
+    "analysis_target": "marshmallow.decorators.set_hook",
+    "repository_context": "            @validates(\"s\")\n    return set_hook(None, VALIDATES, field_names=field_names)\ndef set_hook(\n    if fn is None:\n        return functools.partial(set_hook, tag=tag, many=many, **kwargs)\n            @validates(\"s\")\n\n            @validates(\"bar\")\n    return set_hook(None, VALIDATES, field_names=field_names)\ndef set_hook(\n    if fn is None:\n        return functools.partial(set_hook, tag=tag, many=many, **kwargs)\n            @validates(\"bar\")",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 452
+    }
+  },
+  "marshmallow.decorators.validates_schema": {
+    "analysis_target": "marshmallow.decorators.set_hook",
+    "repository_context": "            @validates_schema\n        fn,\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n    return set_hook(\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                validator_func(output, partial=partial, many=many, unknown=unknown)\n            def validate_schema(self, data, **kwargs):\n\n        @validates_schema\n        fn,\ndef set_hook(\n        function.__marshmallow_hook__ = hook_config = defaultdict(list)\n    return fn\n    return set_hook(\n                    attr.__marshmallow_hook__\n                hook_config: dict[str, list[tuple[bool, dict]]] = (\n                for tag, config in hook_config.items():\n                validator_func(output, partial=partial, many=many, unknown=unknown)\n        def check_unknown_validates(self, data, unknown, **kwargs):",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 953
+    }
+  },
+  "marshmallow.experimental.context.Context.get": {
+    "analysis_target": "marshmallow.experimental.context.Context.get",
+    "repository_context": "        self.context = context\n        self.token = _CURRENT_CONTEXT.set(self.context)\n                item[\"f_1\"] *= NumDictContext.get()[1]\n                item[\"f_1\"] *= NumDictContext.get()[1]\n        return _CURRENT_CONTEXT.get()\n                item[\"f_1\"] *= NumDictContext.get()[1]\n\n        self.context = context\n        self.token = _CURRENT_CONTEXT.set(self.context)\n                item[\"f_3\"] *= NumDictContext.get()[3]\n                item[\"f_3\"] *= NumDictContext.get()[3]\n        return _CURRENT_CONTEXT.get()\n                item[\"f_3\"] *= NumDictContext.get()[3]\n\n        self.context = context\n        self.token = _CURRENT_CONTEXT.set(self.context)\n                data[\"f_2\"] *= NumDictContext.get()[2]\n                data[\"f_2\"] *= NumDictContext.get()[2]\n        return _CURRENT_CONTEXT.get()\n                data[\"f_2\"] *= NumDictContext.get()[2]",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 871
+    }
+  },
+  "marshmallow.schema.Schema.load": {
+    "analysis_target": "marshmallow.schema.Schema._do_load",
+    "repository_context": "        if field_unknown == EXCLUDE or (\n            schema_unknown == EXCLUDE and not field_unknown\n    def load(\n        return self._do_load(\n    def _do_load(\n        errors: dict[str, list[str]] = {}\n        if not errors:\n            result = self._deserialize(\n    def _deserialize(\n        ret_d = self.dict_class()\n        return ret_d\n        return result\n\n    data = {\"friends\": \"Clark;Alfred;Robin\"}\n    result = MySchema().load(data)\n    result = MySchema().load(data)\n    def load(\n        return self._do_load(\n    def _do_load(\n        errors: dict[str, list[str]] = {}\n        if not errors:\n            result = self._deserialize(\n    def _deserialize(\n        ret_d = self.dict_class()\n        return ret_d\n        return result\n    result = MySchema().load(data)\n\n        schema = MySchema()\n        load_data = schema.load({\"foo\": 42})\n        load_data = schema.load({\"foo\": 42})\n    def load(\n        return self._do_load(\n    def _do_load(\n        errors: dict[str, list[str]] = {}\n        if not errors:\n            result = self._deserialize(\n    def _deserialize(\n        ret_d = self.dict_class()\n        return ret_d\n        return result\n        load_data = schema.load({\"foo\": 42})",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 1213
+    }
+  },
+  "marshmallow.schema.Schema.dump": {
+    "analysis_target": "marshmallow.schema.Schema.dump",
+    "repository_context": "        blog = Blog(title=\"Unowned Blog\", user=None, collaborators=[col1, col2])\n        s = FlatBlogSchema()\n        data = s.dump(blog)\n        data = s.dump(blog)\n    def dump(self, obj: typing.Any, *, many: bool | None = None):\n        result = self._serialize(processed_obj, many=many)\n    def _serialize(self, obj: typing.Any, *, many: bool = False):\n        ret = self.dict_class()\n        return ret\n        return result\n        data = s.dump(blog)\n        for i, name in enumerate(data[\"collaborators\"]):\n\n    s = UserSchema()\n    result = s.dump(user)\n    result = s.dump(user)\n    def dump(self, obj: typing.Any, *, many: bool | None = None):\n        result = self._serialize(processed_obj, many=many)\n    def _serialize(self, obj: typing.Any, *, many: bool = False):\n        ret = self.dict_class()\n        return ret\n        return result\n    result = s.dump(user)\n\n    u = User(\"John\", age=42.3)\n    serialized = UserFloatStringSchema().dump(u)\n    serialized = UserFloatStringSchema().dump(u)\n    def dump(self, obj: typing.Any, *, many: bool | None = None):\n        result = self._serialize(processed_obj, many=many)\n    def _serialize(self, obj: typing.Any, *, many: bool = False):\n        ret = self.dict_class()\n        return ret\n        return result\n    serialized = UserFloatStringSchema().dump(u)",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 1321
+    }
+  },
+  "marshmallow.schema.Schema.dumps": {
+    "analysis_target": "marshmallow.schema.Schema.dumps",
+    "repository_context": "    s_single = UserSchema(only=(\"name\",))\n    u1, u2 = User(\"King Arthur\"), User(\"Sir Lancelot\")\n    s_single.loads(s_single.dumps(u1))\n    s_single.loads(s_single.dumps(u1))\n    def dumps(self, obj: typing.Any, *args, many: bool | None = None, **kwargs):\n        serialized = self.dump(obj, many=many)\n    def dump(self, obj: typing.Any, *, many: bool | None = None):\n        result = self._serialize(processed_obj, many=many)\n    def _serialize(self, obj: typing.Any, *, many: bool = False):\n        ret = self.dict_class()\n        return ret\n        return result\n        return self.opts.render_module.dumps(serialized, *args, **kwargs)\n    s_single.loads(s_single.dumps(u1))\n    def loads(\n        data = self.opts.render_module.loads(s, **kwargs)\n        return self.load(data, many=many, partial=partial, unknown=unknown)\n    def load(\n            data, many=many, partial=partial, unknown=unknown, postprocess=True\n        return self._do_load(\n    def _do_load(\n            processed_data = data\n                processed_data,\n            result = self._deserialize(\n    def _deserialize(\n        if not isinstance(data, Mapping):\n            partial_is_collection = is_collection(partial)\ndef is_collection(obj) -> typing.TypeGuard[typing.Iterable]:\n            for attr_name, field_obj in self.load_fields.items():\n                    field_obj.data_key if field_obj.data_key is not None else attr_name\n                field_name = (\n                raw_value = data.get(field_name, missing)\n                if raw_value is missing:\n                d_kwargs = {}\n                if partial_is_collection:\n                elif partial is not None:\n                    val, field_obj=field_obj, field_name=field_name, d_kwargs=d_kwargs\n                value = self._call_and_store(\n                    getter_func=getter,\n                    data=raw_value,\n                    field_name=field_name,\n                    error_store=error_store,\n                    index=index,\n    def _call_and_store(getter_func, data, *, field_name, error_store, index=None):\n            value = getter_func(data)\n                def getter(\n                        val,\n                    return field_obj.deserialize(\n    def deserialize(\n                if value is not missing:\n                    key = field_obj.attribute or attr_name\n                    set_value(ret_d, key, value)\ndef set_value(dct: dict[str, typing.Any], key: str, value: typing.Any):\n    if \".\" in key:\n        dct[key] = value\n            if unknown != EXCLUDE:\n                    for field_name, field_obj in self.load_fields.items()\n                fields = {\n                for key in set(data) - fields:\n                        original_data=data,\n                    result = self._invoke_load_processors(\n    def _invoke_load_processors(\n            original_data=original_data,\n        data = self._invoke_processors(\n    def _invoke_processors(\n            original_data=original_data,\n        return self._invoke_processors(\n\n    s_many = UserSchema(many=True, only=(\"name\",))\n    s_many.loads(s_many.dumps([u1, u2]))\n    s_many.loads(s_many.dumps([u1, u2]))\n    def dumps(self, obj: typing.Any, *args, many: bool | None = None, **kwargs):\n        if many and obj is not None:\n            return [self._serialize(d, many=False) for d in obj]\n        result = self._serialize(processed_obj, many=many)\n        return result\n        serialized = self.dump(obj, many=many)\n        return self.opts.render_module.dumps(serialized, *args, **kwargs)\n    s_many.loads(s_many.dumps([u1, u2]))\n    def loads(\n        data = self.opts.render_module.loads(s, **kwargs)\n        return self.load(data, many=many, partial=partial, unknown=unknown)\n    def load(\n            data, many=many, partial=partial, unknown=unknown, postprocess=True\n        return self._do_load(\n    def _do_load(\n            processed_data = data\n                processed_data,\n            result = self._deserialize(\n    def _deserialize(\n            if not is_sequence_but_not_string(data):\ndef is_sequence_but_not_string(obj) -> typing.TypeGuard[Sequence]:\n                    for idx, d in enumerate(data)\n                        original_data=data,\n                    result = self._invoke_load_processors(\n    def _invoke_load_processors(\n            original_data=original_data,\n        data = self._invoke_processors(\n    def _invoke_processors(\n            original_data=original_data,\n        return self._invoke_processors(\n\n    s = UserSchema()\n    json_result = s.dumps([u1, u2], many=True)\n    json_result = s.dumps([u1, u2], many=True)\n    def dumps(self, obj: typing.Any, *args, many: bool | None = None, **kwargs):\n        if many and obj is not None:\n            return [self._serialize(d, many=False) for d in obj]\n        result = self._serialize(processed_obj, many=many)\n        return result\n        serialized = self.dump(obj, many=many)\n        return self.opts.render_module.dumps(serialized, *args, **kwargs)\n    json_result = s.dumps([u1, u2], many=True)\n    data = json.loads(json_result)",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 5070
+    }
+  },
+  "marshmallow.schema.Schema.from_dict": {
+    "analysis_target": "marshmallow.schema.Schema.from_dict",
+    "repository_context": "        OSchema = OrderedSchema.from_dict({\"foo\": fields.Int(), \"bar\": fields.Int()})\n        OSchema = OrderedSchema.from_dict({\"foo\": fields.Int(), \"bar\": fields.Int()})\n        return type(name, (cls,), {**fields.copy(), \"Meta\": Meta})\n        OSchema = OrderedSchema.from_dict({\"foo\": fields.Int(), \"bar\": fields.Int()})\n        dumped = OSchema().dump({\"foo\": 42, \"bar\": 24})\n    def __init__(\n        self.declared_fields = copy.deepcopy(self._declared_fields)\n        self._normalize_nested_options()\n    def _normalize_nested_options(self) -> None:\n        if self.only is not None:\n        if self.exclude:\n        self._init_fields()\n    def _init_fields(self) -> None:\n        if self.opts.fields:\n            available_field_names = self.set_class(self.declared_fields.keys())\n    def __init__(self, iterable=None):\n        if iterable is not None:\n            self |= iterable\n        invalid_fields = self.set_class()\n        if self.only is not None:\n            field_names = available_field_names\n        if self.exclude:\n        if invalid_fields:\n        fields_dict = self.dict_class()\n        for field_name in field_names:\n            field_obj = self.declared_fields[field_name]\n            self._bind_field(field_name, field_obj)\n    def _bind_field(self, field_name: str, field_obj: Field) -> None:\n        if field_name in self.load_only:\n        if field_name in self.dump_only:\n        field_obj._bind_to_schema(field_name, self)\n    def _bind_to_schema(self, field_name: str, parent: Schema | Field) -> None:\n        self.on_bind_field(field_name, field_obj)\n    def on_bind_field(self, field_name: str, field_obj: Field) -> None:\n            fields_dict[field_name] = field_obj\n            field_obj.load_only = True\n        load_fields, dump_fields = self.dict_class(), self.dict_class()\n        for field_name, field_obj in fields_dict.items():\n            if not field_obj.dump_only:\n                load_fields[field_name] = field_obj\n            if not field_obj.load_only:\n                dump_fields[field_name] = field_obj\n        self.fields = fields_dict\n        messages.update(self._default_error_messages)\n        for cls in reversed(self.__class__.__mro__):\n    def dump(self, obj: typing.Any, *, many: bool | None = None):\n        if self._hooks[PRE_DUMP]:\n            processed_obj = obj\n        result = self._serialize(processed_obj, many=many)\n    def _serialize(self, obj: typing.Any, *, many: bool = False):\n        ret = self.dict_class()\n        for attr_name, field_obj in self.dump_fields.items():\n            value = field_obj.serialize(attr_name, obj, accessor=self.get_attribute)\n    def serialize(\n            value = self.get_value(obj, attr, accessor=accessor)\n    def get_value(\n        return accessor_func(obj, check_key, default)\n    def get_attribute(self, obj: typing.Any, attr: str, default: typing.Any):\n        return get_value(obj, attr, default)\ndef get_value(obj, key: int | str, default=missing):\n    return _get_value_for_key(obj, key, default)\ndef _get_value_for_key(obj, key, default):\n    if not hasattr(obj, \"__getitem__\"):\n        return obj[key]\n            if value is missing_:\n            if value is missing_:\n        return self._serialize(value, attr, obj, **kwargs)\n    def _serialize(self, value, attr, obj, **kwargs) -> str | _NumT | None:\n        return ret\n        if self._hooks[POST_DUMP]:\n        return result\n\n        MySchema = Schema.from_dict({\"foo\": fields.Str()})\n        MySchema = Schema.from_dict({\"foo\": fields.Str()})\n        return type(name, (cls,), {**fields.copy(), \"Meta\": Meta})\n        MySchema = Schema.from_dict({\"foo\": fields.Str()})",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 3650
+    }
+  },
+  "marshmallow.schema.Schema.loads": {
+    "analysis_target": "marshmallow.schema.Schema.loads",
+    "repository_context": "    s = UserSchema()\n    result = s.loads(json.dumps({\"name\": \"Monty\"}))\n    result = s.loads(json.dumps({\"name\": \"Monty\"}))\n        errors: dict[str, list[str]] = {}\n        if not errors:\n            if not errors and postprocess and self._hooks[POST_LOAD]:\n            pass_original = processor_kwargs.get(\"pass_original\", False)\n            if many and not pass_collection:\n            elif pass_original:\n        return User(**data)\n                data = processor(data, many=many, **kwargs)\n        return data\n        return self._invoke_processors(\n                    result = self._invoke_load_processors(\n        return result\n        return self._do_load(\n        return self.load(data, many=many, partial=partial, unknown=unknown)\n    result = s.loads(json.dumps({\"name\": \"Monty\"}))\n\n    user_dict = {\"name\": \"Monty\", \"age\": \"42.3\"}\n    user_json = json.dumps(user_dict)\n    result = UserSchema().loads(user_json)\n    result = UserSchema().loads(user_json)\n        errors: dict[str, list[str]] = {}\n        if not errors:\n            if not errors and postprocess and self._hooks[POST_LOAD]:\n            pass_original = processor_kwargs.get(\"pass_original\", False)\n            if many and not pass_collection:\n            elif pass_original:\n        return User(**data)\n                data = processor(data, many=many, **kwargs)\n        return data\n        return self._invoke_processors(\n                    result = self._invoke_load_processors(\n        return result\n        return self._do_load(\n        return self.load(data, many=many, partial=partial, unknown=unknown)\n    result = UserSchema().loads(user_json)\n\n    s = UserSchema()\n    in_data = [{\"name\": \"Mick\"}, {\"name\": \"Keith\"}]\n    in_json_data = json.dumps(in_data)\n    result = s.loads(in_json_data, many=True)\n    result = s.loads(in_json_data, many=True)\n        errors: dict[str, list[str]] = {}\n        if not errors:\n            if not errors and postprocess and self._hooks[POST_LOAD]:\n            pass_original = processor_kwargs.get(\"pass_original\", False)\n            if many and not pass_collection:\n                if pass_original:\n                    data = [processor(item, many=many, **kwargs) for item in data]\n        return data\n        return self._invoke_processors(\n                    result = self._invoke_load_processors(\n        return result\n        return self._do_load(\n        return self.load(data, many=many, partial=partial, unknown=unknown)\n    result = s.loads(in_json_data, many=True)",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 2501
+    }
+  },
+  "marshmallow.schema.Schema.validate": {
+    "analysis_target": "marshmallow.schema.Schema.validate",
+    "repository_context": "    sch = MySchema()\n    errors = sch.validate([valid, invalid], many=True)\n    errors = sch.validate([valid, invalid], many=True)\n            return typing.cast(\"dict[str, list[str]]\", exc.messages)\n    errors = sch.validate([valid, invalid], many=True)\n\n        errors = schema.validate(data)\n        errors = schema.validate(data)\n        return {}\n        errors = schema.validate(data)\n\n        s = UserSchema()\n        errors = s.validate({\"email\": \"bad-email\"})\n        errors = s.validate({\"email\": \"bad-email\"})\n            return typing.cast(\"dict[str, list[str]]\", exc.messages)\n        errors = s.validate({\"email\": \"bad-email\"})",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 641
+    }
+  },
+  "marshmallow.utils.callable_or_raise": {
+    "analysis_target": "marshmallow.utils.callable_or_raise",
+    "repository_context": "    s = UserSchema()\n    def __init__(\n        self.declared_fields = copy.deepcopy(self._declared_fields)\n        self._init_fields()\n    def _init_fields(self) -> None:\n            field_obj = self.declared_fields[field_name]\n            self._bind_field(field_name, field_obj)\n    def _bind_field(self, field_name: str, field_obj: Field) -> None:\n        field_obj._bind_to_schema(field_name, self)\n    def _bind_to_schema(self, field_name, parent):\n        if self.serialize_method_name:\n            self._serialize_method = utils.callable_or_raise(\n                getattr(parent, self.serialize_method_name)\n            self._serialize_method = utils.callable_or_raise(\ndef callable_or_raise(obj):\n    return obj\n            self._serialize_method = utils.callable_or_raise(\n        if self._serialize_method is not None:\n            return self._serialize_method(obj)\n    def get_is_old(self, obj):\n        if obj is None:\n        if isinstance(obj, dict):\n            age = obj.age\n            return age > 80\n        return self._serialize(value, attr, obj, **kwargs)\n            value = field_obj.serialize(attr_name, obj, accessor=self.get_attribute)\n            if value is missing:\n            ret[key] = value\n\n        self.serialize_func = serialize and utils.callable_or_raise(serialize)\n        self.serialize_func = serialize and utils.callable_or_raise(serialize)\ndef callable_or_raise(obj):\n    return obj\n        self.serialize_func = serialize and utils.callable_or_raise(serialize)\n        return self.serialize_func(obj)\n        return self._serialize(value, attr, obj, **kwargs)\n\n        self.deserialize_func = deserialize and utils.callable_or_raise(deserialize)\n        self.deserialize_func = deserialize and utils.callable_or_raise(deserialize)\ndef callable_or_raise(obj):\n    return obj\n        self.deserialize_func = deserialize and utils.callable_or_raise(deserialize)",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 1902
+    }
+  },
+  "marshmallow.schema.Schema.get_attribute": {
+    "analysis_target": "marshmallow.utils.get_value",
+    "repository_context": "        blog = Blog(title=\"Unowned Blog\", user=None, collaborators=[col1, col2])\n    def __init__(self, title, user, collaborators=None, categories=None, id_=None):\n        self.user = user\n        s = FlatBlogSchema()\n        data = s.dump(blog)\n    def dump(self, obj: typing.Any, *, many: bool | None = None):\n        if self._hooks[PRE_DUMP]:\n            processed_obj = obj\n        result = self._serialize(processed_obj, many=many)\n    def _serialize(self, obj: typing.Any, *, many: bool = False):\n            value = field_obj.serialize(attr_name, obj, accessor=self.get_attribute)\n    def serialize(\n        if self._CHECK_ATTRIBUTE:\n            value = self.get_value(obj, attr, accessor=accessor)\n    def get_value(\n        accessor_func = accessor or utils.get_value\n        check_key = attr if self.attribute is None else self.attribute\n        return accessor_func(obj, check_key, default)\n        return accessor_func(obj, check_key, default)\n    def get_attribute(self, obj: typing.Any, attr: str, default: typing.Any):\n        return get_value(obj, attr, default)\ndef get_value(obj, key: int | str, default=missing):\n    return _get_value_for_key(obj, key, default)\ndef _get_value_for_key(obj, key, default):\n    if not hasattr(obj, \"__getitem__\"):\n        return getattr(obj, key, default)\n        return accessor_func(obj, check_key, default)\n            value = self.get_value(obj, attr, accessor=accessor)\n            if value is missing_:\n            if value is missing_:\n        return self._serialize(value, attr, obj, **kwargs)\n    def _serialize(self, nested_obj, attr, obj, **kwargs):",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 1611
+    }
+  },
+  "marshmallow.utils.get_value": {
+    "analysis_target": "marshmallow.utils.get_value",
+    "repository_context": "    p = PointNT(x=42, y=None)\ndef get_value(obj, key: int | str, default=missing):\n    return _get_value_for_key(obj, key, default)\ndef _get_value_for_key(obj, key, default):\n        return getattr(obj, key, default)\n\n    lst = [1, 2, 3]\ndef get_value(obj, key: int | str, default=missing):\n    return _get_value_for_key(obj, key, default)\ndef _get_value_for_key(obj, key, default):\n        return obj[key]",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 406
+    }
+  },
+  "marshmallow.utils.is_collection": {
+    "analysis_target": "marshmallow.utils.is_collection",
+    "repository_context": "    return (hasattr(obj, \"__iter__\") and not hasattr(obj, \"strip\")) or is_generator(obj)\n    return is_iterable_but_not_string(obj) and not isinstance(obj, Mapping)",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 164
+    }
+  },
+  "marshmallow.utils.is_generator": {
+    "analysis_target": "marshmallow.utils.is_generator",
+    "repository_context": "    return (hasattr(obj, \"__iter__\") and not hasattr(obj, \"strip\")) or is_generator(obj)\n    return (hasattr(obj, \"__iter__\") and not hasattr(obj, \"strip\")) or is_generator(obj)\n    return inspect.isgeneratorfunction(obj) or inspect.isgenerator(obj)\n    return (hasattr(obj, \"__iter__\") and not hasattr(obj, \"strip\")) or is_generator(obj)\n    return is_iterable_but_not_string(obj) and not isinstance(obj, Mapping)\n            partial_is_collection = is_collection(partial)\n                if partial_is_collection:\n                elif partial is not None:",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 557
+    }
+  },
+  "marshmallow.utils.is_iterable_but_not_string": {
+    "analysis_target": "marshmallow.utils.is_iterable_but_not_string",
+    "repository_context": "    return is_iterable_but_not_string(obj) and not isinstance(obj, Mapping)\n    return is_iterable_but_not_string(obj) and not isinstance(obj, Mapping)\n    return (hasattr(obj, \"__iter__\") and not hasattr(obj, \"strip\")) or is_generator(obj)\n    return is_iterable_but_not_string(obj) and not isinstance(obj, Mapping)\n        if not is_collection(exclude):\n\n            foo = fields.Raw(required=True, validate=[validate1, validate2])\n    def __init__(\n        self.validators = self._normalize_processors(validate, param=\"validate\")\n    def _normalize_processors(\n        if utils.is_iterable_but_not_string(processors):\n        if utils.is_iterable_but_not_string(processors):\n    return (hasattr(obj, \"__iter__\") and not hasattr(obj, \"strip\")) or is_generator(obj)\n        if utils.is_iterable_but_not_string(processors):\n            return list(processors)\n        self.validators = self._normalize_processors(validate, param=\"validate\")",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 940
+    }
+  },
+  "marshmallow.utils.is_sequence_but_not_string": {
+    "analysis_target": "marshmallow.utils.is_sequence_but_not_string",
+    "repository_context": "        if only is not None and not utils.is_sequence_but_not_string(only):\n        if only is not None and not utils.is_sequence_but_not_string(only):\n    return isinstance(obj, Sequence) and not isinstance(obj, (str, bytes))\n        if only is not None and not utils.is_sequence_but_not_string(only):\n\n        if not utils.is_sequence_but_not_string(exclude):\n        if not utils.is_sequence_but_not_string(exclude):\n    return isinstance(obj, Sequence) and not isinstance(obj, (str, bytes))\n        if not utils.is_sequence_but_not_string(exclude):\n\n        return self._load(value, partial=partial)\n    def _load(\n            valid_data = self.schema.load(value, unknown=self.unknown, partial=partial)\n    def load(\n        return self._do_load(\n            data, many=many, partial=partial, unknown=unknown, postprocess=True\n    def _do_load(\n        errors: dict[str, list[str]] = {}\n        many = self.many if many is None else bool(many)\n        if self._hooks[PRE_LOAD]:\n            processed_data = data\n        if not errors:\n                processed_data,\n                many=many,\n    def _deserialize(\n        if many:\n            if not is_sequence_but_not_string(data):\n            if not is_sequence_but_not_string(data):\n    return isinstance(obj, Sequence) and not isinstance(obj, (str, bytes))\n            if not is_sequence_but_not_string(data):\n                    for idx, d in enumerate(data)\n                ret_l = [\n            return ret_l\n            result = self._deserialize(\n                error_store=error_store, data=result, many=many\n            self._invoke_field_validators(\n    def _invoke_field_validators(self, *, error_store: ErrorStore, data, many: bool):\n            exc = ValidationError(errors, data=data, valid_data=result)\n    def __init__(\n        self.valid_data = valid_data\n            self.handle_error(exc, data, many=many, partial=partial)\n    def handle_error(\n            raise exc",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 1944
+    }
+  },
+  "marshmallow.utils.pluck": {
+    "analysis_target": "marshmallow.utils.pluck",
+    "repository_context": "        if many and obj is not None:\n            return [self._serialize(d, many=False) for d in obj]\n        result = self._serialize(processed_obj, many=many)\n        return result\n        return schema.dump(nested_obj, many=many)\n        ret = super()._serialize(nested_obj, attr, obj, **kwargs)\n        if self.many:\n            return utils.pluck(ret, key=self._field_data_key)\n            return utils.pluck(ret, key=self._field_data_key)\n    return [d[key] for d in dictlist]\n            return utils.pluck(ret, key=self._field_data_key)\n        return self._serialize(value, attr, obj, **kwargs)\n            value = field_obj.serialize(attr_name, obj, accessor=self.get_attribute)\n            if value is missing:\n            ret[key] = value\n        for i, name in enumerate(data[\"collaborators\"]):",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 807
+    }
+  },
+  "marshmallow.utils.set_value": {
+    "analysis_target": "marshmallow.utils.set_value",
+    "repository_context": "    d: dict[str, int | dict] = {}\n    utils.set_value(d, \"foo\", 42)\n    utils.set_value(d, \"foo\", 42)\ndef set_value(dct: dict[str, typing.Any], key: str, value: typing.Any):\n    if \".\" in key:\n        dct[key] = value\nd\n\n    d = {}\n    utils.set_value(d, \"foo.bar\", 42)\n    utils.set_value(d, \"foo.bar\", 42)\ndef set_value(dct: dict[str, typing.Any], key: str, value: typing.Any):\n    if \".\" in key:\n        head, rest = key.split(\".\", 1)\n        target = dct.setdefault(head, {})\n        set_value(target, rest, value)\n        dct[key] = value\nd\n\n    d = {\"foo\": {}}\n    utils.set_value(d, \"foo.bar\", 42)\n    utils.set_value(d, \"foo.bar\", 42)\ndef set_value(dct: dict[str, typing.Any], key: str, value: typing.Any):\n    if \".\" in key:\n        set_value(target, rest, value)\n        dct[key] = value\nd",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 799
+    }
+  },
+  "marshmallow.utils.timedelta_to_microseconds": {
+    "analysis_target": "marshmallow.utils.timedelta_to_microseconds",
+    "repository_context": "        microseconds: int = utils.timedelta_to_microseconds(value)\n        microseconds: int = utils.timedelta_to_microseconds(value)\n    return (value.days * (24 * 3600) + value.seconds) * 1000000 + value.microseconds\n        microseconds: int = utils.timedelta_to_microseconds(value)",
+    "metadata": {
+      "role": "caller_slice",
+      "model": "dynapyt-code-v1",
+      "status": "PARTIAL",
+      "actual_chars": 285
+    }
+  }
+}

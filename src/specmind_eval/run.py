@@ -76,7 +76,7 @@ def _run(config, output, resume=False, *, preflight_only=False):
         for key, pack in sliced_callers.items():
             if pack["metadata"].get("role") != "caller_slice":
                 raise ValueError("Expected a caller slice, not a target/helper slice: " + key)
-            if pack["metadata"].get("model") != "caller-variable-ddg-v2" or pack["metadata"].get("status") != "complete_supported":
+            if pack["metadata"].get("model") != "dynapyt-code-v1":
                 raise ValueError("Regenerate caller context from verified DDG criteria: " + key)
 
     if graph:

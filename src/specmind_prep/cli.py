@@ -34,36 +34,6 @@ def build_parser():
     parser = argparse.ArgumentParser(description="Project preparation stages and explicit LLM mutant generation")
     parser.add_argument("--traceback", action="store_true", help="Show full Python traceback for debugging")
     sub = parser.add_subparsers(dest="command", required=True)
-    tracing = sub.add_parser("slice-trace", help="Trace one exact test for primitive-local dynamic slicing")
-    for name in ("repo", "project", "output"):
-        tracing.add_argument("--" + name, type=path, required=True)
-    tracing.add_argument("--test", required=True, help="Exact pytest nodeid, including parametrization")
-    tracing.add_argument("--target", required=True, help="Top-level function ID; initial primitive-local model")
-    tracing.add_argument("--caller", help="Optional selected top-level package caller; primitive actual/formal links")
-    tracing.add_argument("--readonly-helpers", nargs="*", help="Read-only expression mode with explicit helper IDs")
-    tracing.add_argument("--heap",action="store_true",help="Opt-in exact dict/list heap caller model")
-    tracing.add_argument("--timeout", type=float, default=60)
-    tracing.add_argument("--max-events", type=int, default=20000)
-    pipeline = sub.add_parser('slicing-pipeline', help='Automatic caller selection, heap trace, criteria, DDG/RDDG and context')
-    for name in ('dataset','repo','project','output'):
-        pipeline.add_argument('--'+name,type=path,required=True)
-    pipeline.add_argument('--preflight-only',action='store_true')
-    pipeline.add_argument('--max-tests',type=int,default=1)
-    pipeline.add_argument('--timeout',type=float,default=60)
-    caller = sub.add_parser('caller-slice-context', help='Export verified backward caller variable DDG slices')
-    for name in ('dataset','repo','project','output'):
-        caller.add_argument('--'+name,type=path,required=True)
-    caller.add_argument('--criteria',type=path,required=True)
-    context = sub.add_parser('slice-context', help='Prepare validated backward slice context for evaluation')
-    for name in ('spec','repo','output'):
-        context.add_argument('--'+name,type=path,required=True)
-    slicing = sub.add_parser("slice-call", help="Backward variable query on an existing occurrence-based DDG")
-    for name in ("repo", "trace", "output"):
-        slicing.add_argument("--" + name, type=path, required=True)
-    slicing.add_argument("--event", type=int, required=True)
-    slicing.add_argument("--variable", required=True)
-    slicing.add_argument("--when", choices=["before", "after"], default="before")
-    slicing.add_argument("--direction", choices=["backward"], default="backward")
     audit = sub.add_parser("public-api-callers", help="Inventory documented public APIs and scan source/test calls")
     for name in ("repo", "project", "output"):
         audit.add_argument("--" + name, type=path, required=True)
@@ -221,47 +191,7 @@ def main(argv=None):
     try:
         from specmind_eval.common.storage import read
 
-        if args.command == "slice-trace":
-            from specmind_prep.project import load_project
-            from specmind_prep.slicing import trace_function
-
-            project = load_project(args.project, args.repo)
-            result = trace_function(
-                args.repo,
-                project,
-                args.test,
-                args.target,
-                args.output,
-                timeout=args.timeout,
-                max_events=args.max_events,
-                caller=args.caller,
-                readonly_helpers=args.readonly_helpers,
-                heap=args.heap,
-            )
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-            return 0 if result["status"] == "complete_supported" else 2
-        elif args.command == 'slicing-pipeline':
-            from specmind_prep.slicing_pipeline import prepare
-            result = prepare(args.dataset,args.repo,args.project,args.output,preflight_only=args.preflight_only,max_tests=args.max_tests,timeout=args.timeout)
-        elif args.command == 'caller-slice-context':
-            from specmind_prep.caller_context import prepare
-            result = {'tasks':len(prepare(args.dataset,args.repo,args.project,args.output,args.criteria))}
-        elif args.command == 'slice-context':
-            from specmind_prep.slice_context import prepare_context
-            result = prepare_context(args.spec,args.repo,args.output)
-        elif args.command == "slice-call":
-            from specmind_prep.slicing import query_slice
-            from specmind_eval.common.outputs import separate_output
-
-            args.output = separate_output(args.output, args.repo, args.trace)
-            result = query_slice(args.trace, args.repo, args.event, args.variable, when=args.when)
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            with args.output.open("x", encoding="utf-8") as stream:
-                json.dump(result, stream, ensure_ascii=False, indent=2)
-                stream.write("\n")
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-            return 0 if result["status"] == "complete_supported" else 2
-        elif args.command == "public-api-callers":
+        if args.command == "public-api-callers":
             from specmind_prep.project import load_project
             from specmind_prep.public_api import analyze
             project = load_project(args.project, args.repo, documented_only=True)
