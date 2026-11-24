@@ -142,4 +142,4 @@ Hướng dẫn [chuẩn bị dataset và mutant](docs/PREPARATION_WORKFLOW.md).
 
 Để chạy bằng venv riêng đã khóa dependency, xem [môi trường ổn định](docs/STABLE_ENVIRONMENT.md).
 
-Hướng dẫn [dynamic slicing và backward query](docs/SLICING.md).
+Chạy cấu hình E với context code từ dynamic slicing bằng [notebook Colab](notebooks/SpecMind_E_Colab.ipynb). Xem [cách chạy và tạo lại context](docs/SLICING.md).
